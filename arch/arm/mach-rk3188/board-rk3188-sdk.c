@@ -47,7 +47,9 @@
 #include <linux/mfd/tps65910.h>
 #include <linux/regulator/act8846.h>
 #include <linux/mfd/rk808.h>
+#include <linux/mfd/rk818.h>
 #include <linux/regulator/rk29-pwm-regulator.h>
+#include <plat/ddr.h>
 
 #ifdef CONFIG_CW2015_BATTERY
 #include <linux/power/cw2015_battery.h>
@@ -83,9 +85,14 @@
 #include <linux/board-id.h>
 #endif
 
-#if defined(CONFIG_MT6620)
+#if defined(CONFIG_MT6620) && !defined(CONFIG_MTK_COMBO_MT66XX)
 #include <linux/gps.h>
 #endif
+
+#if defined(CONFIG_MTK_COMBO_MT66XX)
+#include <linux/combo_mt66xx.h>
+#endif
+
 #include "../mach-rk30/board-rk3168-tb-camera.c"
 
 #if defined(CONFIG_TOUCHSCREEN_GT8XX)
@@ -399,8 +406,12 @@ static struct sensor_platform_data mma8452_info = {
 	.type = SENSOR_TYPE_ACCEL,
 	.irq_enable = 1,
 	.poll_delay_ms = 30,
-        .init_platform_hw = mma8452_init_platform_hw,
-        .orientation = {-1, 0, 0, 0, -1, 0, 0, 0, 1},
+    .init_platform_hw = mma8452_init_platform_hw,
+ 	#if defined (CONFIG_ANDROID_KITKAT)       
+    .orientation = {0, 1, 0, -1, 0, 0, 0, 0, 1},
+ 	#else
+ 	.orientation = {-1, 0, 0, 0, -1, 0, 0, 0, 1},
+ 	#endif
 };
 #endif
 #if defined (CONFIG_GS_LIS3DH)
@@ -639,7 +650,7 @@ struct rk29fb_info lcdc1_screen_info = {
 	#if defined(CONFIG_RK_HDMI)
 	.prop		= EXTEND,	//extend display device
 	.lcd_info  = NULL,
-	.set_screen_info = hdmi_init_lcdc,
+	.set_screen_info = NULL,//hdmi_init_lcdc,
 	#endif
 };
 #endif
@@ -890,6 +901,7 @@ static struct platform_device irda_device = {
 
 #ifdef CONFIG_ION
 #define ION_RESERVE_SIZE        (80 * SZ_1M)
+#define ION_RESERVE_SIZE_120M   (120 * SZ_1M)
 static struct ion_platform_data rk30_ion_pdata = {
 	.nr = 1,
 	.heaps = {
@@ -897,7 +909,7 @@ static struct ion_platform_data rk30_ion_pdata = {
 			.type = ION_HEAP_TYPE_CARVEOUT,
 			.id = ION_NOR_HEAP_ID,
 			.name = "norheap",
-			.size = ION_RESERVE_SIZE,
+//			.size = ION_RESERVE_SIZE,
 		}
 	},
 };
@@ -976,7 +988,9 @@ struct rk29_sdmmc_platform_data default_sdmmc0_data = {
 #if !defined(CONFIG_SDMMC_RK29_OLD)
 	.set_iomux = rk29_sdmmc_set_iomux,
 #endif
-
+#ifdef USE_SDMMC_DATA4_DATA7	
+    .emmc_is_selected = NULL,
+#endif
 	.dma_name = "sd_mmc",
 #ifdef CONFIG_SDMMC0_USE_DMA
 	.use_dma = 1,
@@ -1071,7 +1085,9 @@ struct rk29_sdmmc_platform_data default_sdmmc1_data = {
 #if !defined(CONFIG_SDMMC_RK29_OLD)
 	.set_iomux = rk29_sdmmc_set_iomux,
 #endif
-
+#ifdef USE_SDMMC_DATA4_DATA7	
+	.emmc_is_selected = NULL,
+#endif
 	.dma_name = "sdio",
 #ifdef CONFIG_SDMMC1_USE_DMA
 	.use_dma = 1,
@@ -1124,6 +1140,33 @@ struct rk29_sdmmc_platform_data default_sdmmc1_data = {
 	.enable_sd_wakeup = 0,
 };
 #endif //endif--#ifdef CONFIG_SDMMC1_RK29
+
+#ifdef CONFIG_SDMMC2_RK29
+static int rk29_sdmmc2_cfg_gpio(void)
+{
+    ;
+}
+
+struct rk29_sdmmc_platform_data default_sdmmc2_data = {
+	.host_ocr_avail =
+	    (MMC_VDD_165_195|MMC_VDD_25_26 | MMC_VDD_26_27 | MMC_VDD_27_28 | MMC_VDD_28_29 |
+	     MMC_VDD_29_30 | MMC_VDD_30_31 | MMC_VDD_31_32 | MMC_VDD_32_33 | MMC_VDD_33_34),
+
+	.host_caps = (MMC_CAP_4_BIT_DATA | MMC_CAP_8_BIT_DATA| MMC_CAP_NONREMOVABLE  |
+	        MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED | MMC_CAP_UHS_SDR12 |MMC_CAP_UHS_SDR25 |MMC_CAP_UHS_SDR50),
+
+	.io_init = rk29_sdmmc2_cfg_gpio,
+	.set_iomux = rk29_sdmmc_set_iomux,
+	.emmc_is_selected = sdmmc_is_selected_emmc,
+
+	//.power_en = INVALID_GPIO,
+   // .power_en_level = GPIO_LOW,
+
+	.dma_name = "emmc",
+	.use_dma = 1,
+
+};
+#endif//endif--#ifdef CONFIG_SDMMC2_RK29
 
 /**************************************************************************************************
  * the end of setting for SDMMC devices
@@ -1402,7 +1445,7 @@ struct platform_device rk_device_gps = {
 	};
 #endif
 
-#if defined(CONFIG_MT5931_MT6622)
+#if defined(CONFIG_MT5931_MT6622) || defined(CONFIG_MTK_MT6622)
 static struct mt6622_platform_data mt6622_platdata = {
 		    .power_gpio         = { // BT_REG_ON
 		    	.io             = RK30_PIN3_PD5, // set io to INVALID_GPIO for disable it
@@ -1455,7 +1498,7 @@ static struct platform_device *devices[] __initdata = {
 	&rk29sdk_wifi_device,
 #endif
 
-#if defined(CONFIG_MT6620)
+#if defined(CONFIG_MT6620) && !defined(CONFIG_MTK_COMBO_MT66XX)
     &mt3326_device_gps,
 #endif   
 
@@ -1483,7 +1526,7 @@ static struct platform_device *devices[] __initdata = {
 #if defined(CONFIG_ARCH_RK3188)
 	&device_mali,
 #endif
-#ifdef CONFIG_MT5931_MT6622
+#if defined(CONFIG_MT5931_MT6622) || defined(CONFIG_MTK_MT6622)
 	&device_mt6622,
 #endif
 };
@@ -1986,6 +2029,97 @@ static  struct pmu_info  rk808_ldo_info[] = {
 
 #include "../mach-rk30/board-pmu-rk808.c"
 #endif
+#ifdef CONFIG_MFD_RK818
+#define PMU_POWER_SLEEP RK30_PIN0_PA1
+#define RK818_HOST_IRQ        RK30_PIN0_PB3
+
+static struct pmu_info  rk818_dcdc_info[] = {
+	{
+		.name          = "vdd_cpu",   //arm
+		.min_uv          = 1000000,
+		.max_uv         = 1000000,
+		.suspend_vol  =  900000,
+	},
+	{
+		.name          = "vdd_core",    //logic
+		.min_uv          = 1000000,
+		.max_uv         = 1000000,
+		.suspend_vol  =  900000,
+	},
+	{
+		.name          = "rk818_dcdc3",   //ddr
+		.min_uv          = 1200000,
+		.max_uv         = 1200000,
+		.suspend_vol  =  1200000,
+	},
+	{
+		.name          = "rk818_dcdc4",   //vccio
+		.min_uv          = 3300000,
+		.max_uv         = 3300000,
+		.suspend_vol  =  3000000,
+	},
+	
+};
+static  struct pmu_info  rk818_ldo_info[] = {
+	{
+		.name          = "rk818_ldo1",   //vcc33
+		.min_uv          = 3300000,
+		.max_uv         = 3300000,
+		.suspend_vol   = 3300000,
+	},
+	{
+		.name          = "rk818_ldo2",    //vcctp
+		.min_uv          = 3300000,
+		.max_uv         = 3300000,
+		 .suspend_vol   = 3300000,
+
+	},
+	{
+		.name          = "rk818_ldo3",   //vdd10
+		.min_uv          = 1000000,
+		.max_uv         = 1000000,
+		 .suspend_vol   = 1000000,
+	},
+	{
+		.name          = "rk818_ldo4",   //vcc18
+		.min_uv          = 1800000,
+		.max_uv         = 1800000,
+		 .suspend_vol   = 1800000,
+	},
+	{
+		.name          = "rk818_ldo5",   //vcc28_cif
+		.min_uv          = 2800000,
+		.max_uv         = 2800000,
+		 .suspend_vol   = 2800000,
+	},
+	{
+		.name          = "rk818_ldo6",   //vdd12
+		.min_uv          = 1200000,
+		.max_uv         = 1200000,
+		 .suspend_vol   = 1200000,
+	},
+	{
+		.name          = "rk818_ldo7",   //vcc18_cif
+		.min_uv          = 1800000,
+		.max_uv         = 1800000,
+		 .suspend_vol   = 1800000,
+	},
+	{
+		.name          = "rk818_ldo8",   //vcca_33
+		.min_uv          = 3300000,
+		.max_uv         = 3300000,
+		 .suspend_vol   = 3300000,
+	},
+	{
+		.name          = "rk818_ldo9",   //vcca_33
+		.min_uv          = 3300000,
+		.max_uv         = 3300000,
+		 .suspend_vol   = 3300000,
+	},
+ };
+
+#include "../mach-rk30/board-pmu-rk818.c"
+#endif
 
 
 static struct i2c_board_info __initdata i2c1_info[] = {
@@ -2026,6 +2160,14 @@ static struct i2c_board_info __initdata i2c1_info[] = {
 		.platform_data=&rk808_data,
 	},
 #endif
+#if defined (CONFIG_MFD_RK818)
+	{
+		.type    		= "rk818",
+		.addr           = 0x1c, 
+		.flags			= 0,
+		.platform_data=&rk818_data,
+	},
+#endif
 
 #if defined (CONFIG_RTC_HYM8563)
 	{
@@ -2057,6 +2199,10 @@ void __sramfunc board_pmu_suspend(void)
        if(pmic_is_rk808())
        board_pmu_rk808_suspend();
        #endif
+#if defined (CONFIG_MFD_RK818)
+	if(pmic_is_rk818())
+	board_pmu_rk818_suspend();
+#endif
 
 }
 
@@ -2078,6 +2224,10 @@ void __sramfunc board_pmu_resume(void)
        if(pmic_is_rk808())
        board_pmu_rk808_resume();
        #endif
+#if defined (CONFIG_MFD_RK818)
+	if(pmic_is_rk818())
+	board_pmu_rk818_resume();
+#endif
   
 }
 
@@ -2170,6 +2320,7 @@ static struct i2c_board_info __initdata i2c3_info[] = {
 
 #ifdef CONFIG_I2C4_RK30
 static struct i2c_board_info __initdata i2c4_info[] = {
+/*
     #if defined (CONFIG_SND_SOC_RT5616)
     {
                 .type                   = "rt5616",
@@ -2178,7 +2329,7 @@ static struct i2c_board_info __initdata i2c4_info[] = {
 
      },
     #endif
-
+*/
 };
 #endif
 
@@ -2323,6 +2474,12 @@ static void rk30_pm_power_off(void)
                 rk808_device_shutdown();//rk808 shutdown
         }
         #endif
+		#if defined(CONFIG_MFD_RK818)        
+        if(pmic_is_rk818())
+       {
+                rk818_device_shutdown();//rk818 shutdown
+        }
+		#endif
 
 	gpio_direction_output(POWER_ON_PIN, GPIO_LOW);
 	while (1);
@@ -2556,13 +2713,14 @@ static void __init machine_rk30_board_init(void)
     clk_set_rate(clk_get_sys("rk_serial.0", "uart"), 48*1000000);
 #endif
 
-#if defined(CONFIG_MT5931_MT6622)
+#if defined(CONFIG_MT5931_MT6622) || defined(CONFIG_MTK_MT6622)
 		clk_set_rate(clk_get_sys("rk_serial.0", "uart"), 24*1000000);
 #endif		
 }
 #define HD_SCREEN_SIZE 1920UL*1200UL*4*3
 static void __init rk30_reserve(void)
 {
+	int size, ion_reserve_size;
 #if defined(CONFIG_ARCH_RK3188)
 	/*if lcd resolution great than or equal to 1920*1200,reserve the ump memory */
 	if(!(get_fb_size() < ALIGN(HD_SCREEN_SIZE,SZ_1M)))
@@ -2573,7 +2731,18 @@ static void __init rk30_reserve(void)
 	}
 #endif
 #ifdef CONFIG_ION
-	rk30_ion_pdata.heaps[0].base = board_mem_reserve_add("ion", ION_RESERVE_SIZE);
+	size = ddr_get_cap() >> 20;
+	if(size >= 1024) { // DDR >= 1G, set ion to 120M
+		rk30_ion_pdata.heaps[0].size = ION_RESERVE_SIZE_120M;
+		ion_reserve_size = ION_RESERVE_SIZE_120M;
+	}
+	else {
+		rk30_ion_pdata.heaps[0].size = ION_RESERVE_SIZE;
+		ion_reserve_size = ION_RESERVE_SIZE;
+	}
+	printk("ddr size = %d M, set ion_reserve_size size to %d\n", size, ion_reserve_size);
+	//rk30_ion_pdata.heaps[0].base = board_mem_reserve_add("ion", ION_RESERVE_SIZE);
+	rk30_ion_pdata.heaps[0].base = board_mem_reserve_add("ion", ion_reserve_size);
 #endif
 #ifdef CONFIG_FB_ROCKCHIP
 	resource_fb[0].start = board_mem_reserve_add("fb0 buf", get_fb_size());
@@ -2637,7 +2806,7 @@ static struct cpufreq_frequency_table dvfs_arm_table_volt_level2[] = {
 	{.frequency = 1008 * 1000,      .index = 1075 * 1000},
 	{.frequency = 1200 * 1000,      .index = 1200 * 1000},
 	{.frequency = 1416 * 1000,      .index = 1250 * 1000},
-	{.frequency = 1608 * 1000,      .index = 1350 * 1000},
+	{.frequency = 1608 * 1000,      .index = 1400 * 1000},
 	{.frequency = CPUFREQ_TABLE_END},
 };
 
@@ -2659,7 +2828,7 @@ static struct cpufreq_frequency_table dvfs_gpu_table_volt_level1[] = {
 	{.frequency = 266 * 1000,       .index = 1025 * 1000},
 	{.frequency = 300 * 1000,       .index = 1050 * 1000},
 	{.frequency = 400 * 1000,       .index = 1100 * 1000},
-	{.frequency = 600 * 1000,       .index = 1250 * 1000},
+	{.frequency = 600 * 1000,       .index = 1300 * 1000},
 	{.frequency = CPUFREQ_TABLE_END},
 };
 
@@ -2667,13 +2836,13 @@ static struct cpufreq_frequency_table dvfs_gpu_table_volt_level1[] = {
 static struct cpufreq_frequency_table dvfs_ddr_table_volt_level0[] = {
 	{.frequency = 200 * 1000 + DDR_FREQ_SUSPEND,    .index = 950 * 1000},
 	{.frequency = 300 * 1000 + DDR_FREQ_VIDEO,      .index = 1000 * 1000},
-	{.frequency = 396 * 1000 + DDR_FREQ_NORMAL,     .index = 1100 * 1000},
+	{.frequency = 396 * 1000 + DDR_FREQ_NORMAL,     .index = 1150 * 1000},
 	//{.frequency = 528 * 1000 + DDR_FREQ_NORMAL,     .index = 1200 * 1000},
 	{.frequency = CPUFREQ_TABLE_END},
 };
 
 //if you board is good for volt quality,select dvfs_arm_table_volt_level0
-#define dvfs_arm_table dvfs_arm_table_volt_level1
+#define dvfs_arm_table dvfs_arm_table_volt_level2
 #define dvfs_gpu_table dvfs_gpu_table_volt_level1
 #define dvfs_ddr_table dvfs_ddr_table_volt_level0
 

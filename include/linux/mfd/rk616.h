@@ -247,6 +247,7 @@ struct rk616_platform_data {
 	int hp_ctl_gpio;
 	int rcv_ctl_gpio;
 	int mic_sel_gpio;
+	void *pdata;
 };
 
 struct rk616_route {

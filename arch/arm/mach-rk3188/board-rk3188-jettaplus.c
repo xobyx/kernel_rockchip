@@ -483,6 +483,7 @@ static struct sensor_platform_data cm3217_info = {
 #define MIPI_LCD_RST_PIN   RK30_PIN0_PC3   //mipi lcd's reset pin, if no reset pin, set's  INVALID_GPIO
 #define LCD_EN_VALUE       GPIO_LOW
 #else
+#define MIPI_LCD_RST_PIN   INVALID_GPIO
 #define LCD_EN_VALUE       GPIO_HIGH 
 #endif
 

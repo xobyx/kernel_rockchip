@@ -149,6 +149,8 @@ struct goodix_platform_data goodix_info = {
 
 static struct ts_hw_data ts_hw_info = {
 	.reset_gpio = TOUCH_RESET_PIN,
+	.max_x = 1920,
+	.max_y = 1200,
 	//.touch_en_gpio = TOUCH_POWER_PIN,
 };
 

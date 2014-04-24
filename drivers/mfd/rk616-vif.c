@@ -168,8 +168,9 @@ int rk616_vif_cfg(struct mfd_rk616 *rk616,rk_screen *screen,int id)
 		return -EINVAL;
 	}
 
-
 	rk616_vif_disable(rk616,id);
+	
+	 
 	if( (screen->x_res == 1920) && (screen->y_res == 1080))
 	{
 		if(pll_use_mclk12m)
@@ -508,7 +509,7 @@ static int rk616_lcd0_input_lcd1_unused_cfg(struct mfd_rk616 *rk616,rk_screen *s
 		route->vif0_clk_sel = VIF0_CLKIN_SEL(VIF_CLKIN_SEL_PLL0);
 		route->sclin_sel    = SCL_IN_SEL(SCL_SEL_VIF0); //from vif0
 		route->scl_en       = 1;
-		route->sclk_sel     = SCLK_SEL(SCLK_SEL_PLL1);
+		route->sclk_sel     = SCLK_SEL(SCLK_SEL_PLL0);
 		route->dither_sel   = DITHER_IN_SEL(DITHER_SEL_SCL); //dither from sclaer
 		route->hdmi_sel     = HDMI_IN_SEL(HDMI_IN_SEL_VIF0);//from vif0
 		route->hdmi_clk_sel = HDMI_CLK_SEL(HDMI_CLK_SEL_VIF0);	
@@ -522,9 +523,10 @@ static int rk616_lcd0_input_lcd1_unused_cfg(struct mfd_rk616 *rk616,rk_screen *s
 		route->dither_sel  = DITHER_IN_SEL(DITHER_SEL_VIF0); //dither from sclaer
 		route->hdmi_sel    = HDMI_IN_SEL(HDMI_IN_SEL_VIF0);//from vif0
 	}
-	route->pll1_clk_sel = PLL1_CLK_SEL(LCD0_DCLK);
+	//route->pll1_clk_sel = PLL1_CLK_SEL(LCD0_DCLK);
+	route->pll1_clk_sel = PLL1_CLK_SEL(MCLK_12M);
+	
 	//route->pll0_clk_sel = PLL0_CLK_SEL(LCD0_DCLK);
-
 #if defined(CONFIG_RK616_USE_MCLK_12M)
 	route->pll0_clk_sel = PLL0_CLK_SEL(MCLK_12M);
 #else
@@ -717,7 +719,8 @@ static int rk616_router_cfg(struct mfd_rk616 *rk616)
 		PLL1_CLK_SEL_MASK | PLL0_CLK_SEL_MASK; //pll1 clk from lcdc1_dclk,pll0 clk from lcdc0_dclk,mux_lcdx = lcdx_clk
 	ret = rk616->write_dev(rk616,CRU_CLKSEL0_CON,&val);
 	
-	val = (route->sclk_sel) | SCLK_SEL_MASK;
+	//val = (route->sclk_sel) | SCLK_SEL_MASK;
+	val = CODEC_MCLK_SEL(CODEC_MCLK_SEL_PLL1) | CODEC_MCLK_SEL_MASK;
 	ret = rk616->write_dev(rk616,CRU_CLKSEL1_CON,&val);
 	
 	val = (SCL_IN_SEL_MASK) | (DITHER_IN_SEL_MASK) | (HDMI_IN_SEL_MASK) | 
@@ -788,16 +791,18 @@ int rk616_set_vif(struct mfd_rk616 *rk616,rk_screen *screen,bool connect)
 		pdata = rk616->pdata;
 	}
 
+	printk("%s connect %d\n", __FUNCTION__, connect);
 	if(!connect)
 	{
 		rk616_vif_disable(rk616,0);
 		rk616_vif_disable(rk616,1);
-                rk616_mclk_set_rate(rk616->mclk, 11289600);
+		//rk616_mclk_set_rate(rk616->mclk, 11289600);
 		return 0;
 	}
 #if defined(CONFIG_ONE_LCDC_DUAL_OUTPUT_INF)
 	return 0;
 #else
+	msleep(20);
 	if((pdata->lcd0_func == INPUT) && (pdata->lcd1_func == INPUT))
 	{
 		
@@ -808,6 +813,11 @@ int rk616_set_vif(struct mfd_rk616 *rk616,rk_screen *screen,bool connect)
 	{
 		rk616_lcd0_input_lcd1_unused_cfg(rk616,screen,connect);
 		rk616_dbg(rk616->dev,"rk616 use lcd0 input for hdmi display!\n");
+	}
+	else if((pdata->lcd1_func == INPUT) && (pdata->lcd0_func == UNUSED))
+	{
+		rk616_lcd0_unused_lcd1_input_cfg(rk616,screen,connect);
+		rk616_dbg(rk616->dev,"rk616 use lcd1 input for hdmi display!\n");
 	}
 	rk616_router_cfg(rk616);
 	rk616_vif_cfg(rk616,screen,0);

@@ -128,8 +128,6 @@ int clk_register(struct clk *clk)
 {
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
-	//INIT_LIST_HEAD(&clk->sibling);
-	INIT_LIST_HEAD(&clk->children);
 
 	/*
 	 * trap out already registered clocks
@@ -137,16 +135,22 @@ int clk_register(struct clk *clk)
 	if (clk->node.next || clk->node.prev)
 		return 0;
 
+	INIT_LIST_HEAD(&clk->children);
+
 	mutex_lock(&clocks_mutex);
 	if (clk->get_parent)
 		clk->parent = clk->get_parent(clk);
 	else if (clk->parents)
 		clk->parent =clk_default_get_parent(clk);
 	
-	if (clk->parent)
+	if (clk->parent){
+		if((!clk->parent->children.prev)||(!clk->parent->children.next))
+			INIT_LIST_HEAD(&clk->parent->children);
 		list_add(&clk->sibling, &clk->parent->children);
-	else
+	}else{
 		list_add(&clk->sibling, &root_clks);
+	}
+
 	list_add(&clk->node, &clocks);
 	mutex_unlock(&clocks_mutex);	
 	return 0;

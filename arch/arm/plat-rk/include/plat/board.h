@@ -92,6 +92,7 @@ enum {
 	PMIC_TYPE_RK808 =4,
 	PMIC_TYPE_RICOH619 =5,
 	PMIC_TYPE_RT5025 =6,
+	PMIC_TYPE_RK818 =7,
 	PMIC_TYPE_MAX,
 };
 extern __sramdata  int g_pmic_type;
@@ -102,6 +103,7 @@ extern __sramdata  int g_pmic_type;
 #define pmic_is_rk808()  (g_pmic_type == PMIC_TYPE_RK808)
 #define pmic_is_ricoh619()  (g_pmic_type == PMIC_TYPE_RICOH619)
 #define pmic_is_rt5025()  (g_pmic_type == PMIC_TYPE_RT5025)
+#define pmic_is_rk818()  (g_pmic_type == PMIC_TYPE_RK818)
 
 struct  pmu_info {
 	char		*name;
@@ -132,6 +134,12 @@ struct rksdmmc_gpio_board {
     struct rksdmmc_gpio   data1_gpio;    
     struct rksdmmc_gpio   data2_gpio;
     struct rksdmmc_gpio   data3_gpio;
+#define USE_SDMMC_DATA4_DATA7  /*In order to be compatible with old project, which have not define the member used for eMMC */    
+    struct rksdmmc_gpio   data4_gpio;
+    struct rksdmmc_gpio   data5_gpio;    
+    struct rksdmmc_gpio   data6_gpio;
+    struct rksdmmc_gpio   data7_gpio;
+    struct rksdmmc_gpio   rstnout_gpio;
    
     struct rksdmmc_gpio   detect_irq;    
     struct rksdmmc_gpio   power_en_gpio;   
@@ -160,7 +168,8 @@ struct rk29_sdmmc_platform_data {
 	char dma_name[8];
 	int (*io_init)(void);
 	int (*io_deinit)(void);
-	void (*set_iomux)(int device_id, unsigned int bus_width);//added by xbw at 2011-10-13
+	void (*set_iomux)(int device_id, unsigned int bus_width);//added by xbw at 2011-10-13	
+	int (*emmc_is_selected)(int device_id);
 	int (*status)(struct device *);
 	int (*register_status_notify)(void (*callback)(int card_present, void *dev_id), void *dev_id);
 	int detect_irq;
@@ -187,6 +196,10 @@ struct gsensor_platform_data {
 	int (*gsensor_platform_sleep)(void);
 	int (*gsensor_platform_wakeup)(void);
 	void (*exit_platform_hw)(void);
+};
+
+struct usb4604_platform_data{
+    void (* usb4604_platform_hw_init)(void);
 };
 
 struct akm8975_platform_data {
@@ -460,6 +473,8 @@ struct eeti_egalax_platform_data {
 struct ts_hw_data {
 	int reset_gpio;
 	int touch_en_gpio;
+	int max_x;
+	int max_y;
 	int (*init_platform_hw)(void);
 };
 
@@ -564,6 +579,7 @@ void __init board_mem_reserved(void);
 
 extern struct rk29_sdmmc_platform_data default_sdmmc0_data;
 extern struct rk29_sdmmc_platform_data default_sdmmc1_data;
+extern struct rk29_sdmmc_platform_data default_sdmmc2_data;
 
 extern struct i2c_gpio_platform_data default_i2c_gpio_data;
 extern struct rk29_vmac_platform_data board_vmac_data;

@@ -713,6 +713,7 @@ int mmc_sd_get_cid(struct mmc_host *host, u32 ocr, u32 *cid, u32 *rocr)
 	if (!err)
 		ocr |= SD_OCR_CCS;
 
+#if 0// mask support sd3.0  
 	/*
 	 * If the host supports one of UHS-I modes, request the card
 	 * to switch to 1.8V signaling level.
@@ -725,6 +726,8 @@ int mmc_sd_get_cid(struct mmc_host *host, u32 ocr, u32 *cid, u32 *rocr)
 	if (host->caps & (MMC_CAP_SET_XPC_330 | MMC_CAP_SET_XPC_300 |
 	    MMC_CAP_SET_XPC_180))
 		ocr |= SD_OCR_XPC;
+
+#endif
 
 try_again:
 	err = mmc_send_app_op_cond(host, ocr, rocr);

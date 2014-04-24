@@ -232,6 +232,8 @@ static int ddr_proc_init(void)
 
     ddrtest.pll = clk_get(NULL, "ddr_pll");
     ddrtest.clk = clk_get(NULL, "ddr");
+    ddrtest.freq = clk_get_rate(ddrtest.clk)/1000000;
+
     if (IS_ERR(ddrtest.clk)) {
         ret = PTR_ERR(ddrtest.clk);
         ddrtest.clk = NULL;

@@ -31,7 +31,7 @@ static inline int mode_is_valid(unsigned int mode)
         struct union_mode m;
 	
         m.mode = mode;
-	if(mode == INVALID_MODE || m.mux.bank >= GPIO_BANKS)
+	if(mode == INVALID_MODE || m.mux.bank >= GPIO_BANKS || m.mux.goff < 0xA)
 		return 0;
 	else
 		return 1;
@@ -84,7 +84,7 @@ void iomux_set(unsigned int mode)
         
         m.mode = mode;
 	if(!mode_is_valid(mode)){
-		INFO("<%s> mode(0x%x) is invalid\n", __func__, mode);
+		WARN(1, "<%s> mode(0x%x) is invalid\n", __func__, mode);
 		return;
 	}
         //mask = (m.mux.mode < 2)?1:3;
@@ -108,7 +108,7 @@ int iomux_is_set(unsigned int mode)
         
         m.mode = mode;
 	if(!mode_is_valid(mode)){
-		INFO("<%s> mode(0x%x) is invalid\n", __func__, mode);
+		WARN(1, "<%s> mode(0x%x) is invalid\n", __func__, mode);
 		return -1;
 	}
         mask = 3;

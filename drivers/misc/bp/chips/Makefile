@@ -12,3 +12,5 @@ obj-$(CONFIG_BP_AUTO)                           += a85xx.o
 obj-$(CONFIG_BP_AUTO)                           += u5501.o
 obj-$(CONFIG_BP_AUTO)                           += aw706.o
 obj-$(CONFIG_BP_AUTO)   			+= e1230s.o
+obj-$(CONFIG_BP_AUTO)                           += lm80xs.o
+obj-$(CONFIG_BP_AUTO)                           += lm80xa.o

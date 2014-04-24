@@ -82,7 +82,11 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 		for (i = 1; i < ncores; i++)
 			pmu_set_power_domain(PD_A9_0 + i, false);
 
+#if defined(CONFIG_ARCH_RK319X)
+		memcpy(RK319X_BOOT_BASE, rk30_sram_secondary_startup, sz);
+#else
 		memcpy(RK30_IMEM_NONCACHED, rk30_sram_secondary_startup, sz);
+#endif
 		isb();
 		dsb();
 

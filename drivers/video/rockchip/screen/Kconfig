@@ -194,6 +194,25 @@ config LCD_B080XAN02_MIPI
 	bool "mipi dsi lcd B080XAN02 1024X768"	
 config LCD_RK3168_FAC
         bool "RK3168 for factoryTool"     
+config LCD_EE070NA
+        bool "lvds screen  1024*600 for EE070NA"
+config LCD_KD101N4_RK616_1280X800
+		bool "RK3188 RK616 KD101N4 LCD 1280X800"
+#$_rbox_$_modify_$_zhengyang added for box default framebuffer size
+config BOX_FB_480P
+	bool "ITV framebuffer size and timing is 480P"
+	---help---
+	For itv box, default framebuffer size and timing as 720x480p-60 if you say yes."
+config BOX_FB_720P
+	bool "ITV framebuffer size and timing is 720P"
+	---help---
+	For itv box, default framebuffer size and timing as 1280x720p-60 if you say yes."
+config BOX_FB_1080P
+	bool "ITV framebuffer size and timing is 1080P"
+	---help---
+	For itv box, default framebuffer size and timing as 1920x1080p-60 if you say yes."
+#$_rbox_$_modify_$_end
+
 endchoice
 
 

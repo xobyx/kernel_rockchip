@@ -325,7 +325,8 @@ static void sdmmc_wait_for_req(struct mmc_host *host, struct mmc_request *mrq)
 	mmc_start_request(host, mrq);
 
 #if defined(CONFIG_SDMMC_RK29) && !defined(CONFIG_SDMMC_RK29_OLD)
-    if( strncmp( mmc_hostname(host) ,"mmc0" , strlen("mmc0")) ) 
+    //if( strncmp( mmc_hostname(host) ,"mmc0" , strlen("mmc0")) ) 
+    if(host->host_dev_id == 1)
     {
         multi = (mrq->cmd->retries>0)?mrq->cmd->retries:1;
         waittime = wait_for_completion_timeout(&mrq->completion ,HZ*7*multi); //sdio; for cmd dead. Modifyed by xbw at 2011-06-02
@@ -1850,7 +1851,8 @@ static int sdmmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 /* Order's important: probe SDIO, then SD, then MMC */
 
 #if !defined(CONFIG_USE_SDMMC0_FOR_WIFI_DEVELOP_BOARD)
-    if( strncmp( mmc_hostname(host) ,"mmc0" , strlen("mmc0")) )
+    //if( strncmp( mmc_hostname(host) ,"mmc0" , strlen("mmc0")) )
+    if(host->host_dev_id == 1)
     {
 	    //sdio_reset(host);//make no sense; noteed by xbw at 2011-12-14
     	mmc_go_idle(host);
@@ -1877,11 +1879,7 @@ static int sdmmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
         mmc_go_idle(host);
     }
 #else
-#if defined(CONFIG_RTL8723AS)
-    sdio_reset(host); //make no sense; noteed by xbw at 2011-12-14
-#else
     //sdio_reset(host); //make no sense; noteed by xbw at 2011-12-14
-#endif
 	mmc_go_idle(host);
 
 	if (!(init_ret=mmc_attach_sdio(host)))
@@ -1902,6 +1900,9 @@ static int sdmmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 	}
 #endif // #end--#if !defined(CONFIG_USE_SDMMC0_FOR_WIFI_DEVELOP_BOARD)
 
+
+if(1!=host->rk_sdmmc_emmc_used)
+{
     if (!(init_ret=mmc_attach_sd(host)))
     {
         printk(KERN_INFO "%s..%d..  ===== Initialize SD-card successfully. [%s]\n",\
@@ -1919,7 +1920,7 @@ static int sdmmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 		     goto freq_out;   
 	    }
 	}
-
+}
 
 	if (!(init_ret=mmc_attach_mmc(host)))
 	{

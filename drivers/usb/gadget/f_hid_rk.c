@@ -29,7 +29,12 @@
 #include <linux/wait.h>
 #include <linux/usb/g_hid.h>
 
+#define HIDG_INDEX_KBD      (0)
+#define HIDG_INDEX_MOUSE    (1)
 
+#define KBD_REPORT_ID (0x01)
+//#define MOUSE_REPORT_ID (0x02)
+#define CONSUMER_REPORT_ID (0x02)
 
 static int major, minors;
 static struct class *hidg_class;
@@ -54,7 +59,7 @@ struct f_hidg {
 
 	/* send report */
 	struct mutex			lock;
-	bool				write_pending;
+	u8				write_pending;
 	wait_queue_head_t		write_queue;
 	struct usb_request		*req;
 
@@ -68,18 +73,34 @@ struct f_hidg {
 	struct usb_endpoint_descriptor	*hs_out_ep_desc;
 	
     struct usb_composite_dev        *u_cdev;
-
-	bool connected;
-	bool  boot_protocol;//4   1 for boot protocol , 0 for report protocol
-	bool suspend;
+    
 };
 
-bool  bypass_input = 0;
+struct f_hidg_common    {
+
+    spinlock_t          s_lock;
+    bool bypass_input;
+    bool connected;
+	bool boot_protocol;//4   1 for boot protocol , 0 for report protocol
+	bool suspend;
+	bool allow_wakeup;
+};
+
+struct f_hidg_common g_hid_common = {0};
+
 static inline struct f_hidg *func_to_hidg(struct usb_function *f)
 {
 	return container_of(f, struct f_hidg, func);
 }
-void hidg_disconnect();
+
+struct f_hidg *g_hidg[2];
+
+unsigned char kbd_idle[]     = {KBD_REPORT_ID,0,0,0,0,0,0,0};
+unsigned char consumer_idle[]= {CONSUMER_REPORT_ID,0,0};
+unsigned char mouse_idle[]   = {0,0,0,0,0};
+
+void hidg_disconnect(void);
+void hidg_connect(void);
 
 /*-------------------------------------------------------------------------*/
 /*                           Static descriptors                            */
@@ -114,7 +135,7 @@ static struct usb_endpoint_descriptor hidg_hs_in_ep_desc = {
 	.bEndpointAddress	= USB_DIR_IN,
 	.bmAttributes		= USB_ENDPOINT_XFER_INT,
 	.wMaxPacketSize	  = cpu_to_le16(64),
-	.bInterval		= 4, /* FIXME: Add this field in the
+	.bInterval		= 5, /* FIXME: Add this field in the
 				      * HID gadget configuration?
 				      * (struct hidg_func_descriptor)
 				      */
@@ -149,97 +170,116 @@ static struct usb_descriptor_header *hidg_fs_descriptors[] = {
 };
 
 /* hid descriptor for a keyboard */
-const struct hidg_func_descriptor my_hid_data = {
+const struct hidg_func_descriptor hid_data_kbd = {
 	.subclass		= 1, /* No subclass */
 	.protocol		= 1, /* 1-Keyboard,2-mouse */
 	.report_length		= 64,
-	.report_desc_length = 150,
+	.report_desc_length = 121,
 	.report_desc        = {
-        
-        0x05, 0x01, /*       USAGE_PAGE (Generic Desktop)         */
-        0x09, 0x06, /*       USAGE (Keyboard)                     */
-        0xA1, 0x01, /*       COLLECTION (Application)             */
-            0x85, 0x01, /*   REPORT ID (0x01)                     */
-            0x05, 0x07, /*   USAGE_PAGE (Keyboard)                */
-            0x19, 0xE0, /*   USAGE_MINIMUM (Keyboard LeftControl) */
-            0x29, 0xE7, /*   USAGE_MAXIMUM (Keyboard Right GUI)   */
-            0x15, 0x00, /*   LOGICAL_MINIMUM (0)                  */
-            0x25, 0x01, /*   LOGICAL_MAXIMUM (1)                  */
-            0x75, 0x01, /*   REPORT_SIZE (1)                      */
-            0x95, 0x08, /*   REPORT_COUNT (8)                     */
-            0x81, 0x02, /*   INPUT (Data,Var,Abs)                 */
-            0x95, 0x01, /*   REPORT_COUNT (1)                     */
-            0x75, 0x08, /*   REPORT_SIZE (8)                      */
-            0x81, 0x03, /*   INPUT (Cnst,Var,Abs)                 */
-            0x95, 0x05, /*   REPORT_COUNT (5)                     */
-            0x75, 0x01, /*   REPORT_SIZE (1)                      */
-            0x05, 0x08, /*   USAGE_PAGE (LEDs)                    */
-            0x19, 0x01, /*   USAGE_MINIMUM (Num Lock)             */
-            0x29, 0x05, /*   USAGE_MAXIMUM (Kana)                 */
-            0x91, 0x02, /*   OUTPUT (Data,Var,Abs)                */
-            0x95, 0x01, /*   REPORT_COUNT (1)                     */
-            0x75, 0x03, /*   REPORT_SIZE (3)                      */
-            0x91, 0x03, /*   OUTPUT (Cnst,Var,Abs)                */
-            0x95, 0x06, /*   REPORT_COUNT (6)                     */
-            0x75, 0x08, /*   REPORT_SIZE (8)                      */
-            0x15, 0x00, /*   LOGICAL_MINIMUM (0)                  */
-            0x25, 0x65, /*   LOGICAL_MAXIMUM (101)                */
-            0x05, 0x07, /*   USAGE_PAGE (Keyboard)                */
-            0x19, 0x00, /*   USAGE_MINIMUM (Reserved)             */
-            0x29, 0x65, /*   USAGE_MAXIMUM (Keyboard Application) */
-            0x81, 0x00, /*   INPUT (Data,Ary,Abs)                 */                                                        
-        0xC0,           /*   END_COLLECTION                       */   
-        
-        0x05, 0x0C,     /*   USAGE_PAGE (consumer page)           */
-        0x09, 0x01,     /*   USAGE (consumer control)             */
-        0xA1, 0x01,     /*   COLLECTION (Application)             */
-            0x85, 0x03, /*   REPORT ID (0x03)                     */
-            0x15, 0x00, /*   LOGICAL_MINIMUM (0)                  */
-            0x26, 0xFF, 0x02, /*  LOGICAL_MAXIMUM (0x2FF)         */
-            0x19, 0x00, /*   USAGE_MINIMUM (00)                   */
-            0x2A, 0xFF, 0x02, /*  USAGE_MAXIMUM (0x2FF)           */
-            0x75, 0x10, /*   REPORT_SIZE (16)                     */
-            0x95, 0x01, /*   REPORT_COUNT (1)                     */
-            0x81, 0x00, /*   INPUT (Data,Ary,Abs)                 */ 
-        0xC0,
-        
-        0x05, 0x01,     /*   USAGE_PAGE (Generic Desktop)         */
-        0x09, 0x02,     /*   USAGE (Mouse)                        */
-        0xA1, 0x01,     /*   COLLECTION (Application)             */
-            0x85, 0x02,     /*   REPORT ID (0x02)                 */
-            0x09, 0x01,     /*   USAGE (Pointer)                  */
-            
-            0xA1, 0x00,     /*   COLLECTION (Application)         */
-            0x05, 0x09,     /*   USAGE_PAGE (Button)              */
-            0x19, 0x01,     /*   USAGE_MINIMUM (Button 1)         */
-            0x29, 0x08,     /*   USAGE_MAXIMUM (Button 8)         */
-            0x15, 0x00,     /*   LOGICAL_MINIMUM (0)              */
-            0x25, 0x01,     /*   LOGICAL_MAXIMUM (1)              */
-            0x75, 0x01,     /*   REPORT_SIZE (1)                  */
-            0x95, 0x08,     /*   REPORT_COUNT (8)                 */
-            0x81, 0x02,     /*   INPUT (Data,Var,Abs)             */
-            0x05, 0x01,     /*   USAGE_PAGE (Generic Desktop)     */
-            0x09, 0x30,     /*   USAGE (X)                        */
-            0x09, 0x31,     /*   USAGE (Y)                        */
-            0x16, 0x01, 0xF8, /* LOGICAL_MINIMUM (-2047)          */
-            0x26, 0xFF, 0x07, /* LOGICAL_MAXIMUM (2047)           */
-            0x75, 0x0C,     /*   REPORT_SIZE (12)                 */
-            0x95, 0x02,     /*   REPORT_COUNT (2)                 */
-            0x81, 0x06,     /*   INPUT (Data,Var,Rel)             */
-            0x09, 0x38, 
-            0x15, 0x81,     /*   LOGICAL_MINIMUM (-127)           */
-            0x25, 0x7F,     /*   LOGICAL_MAXIMUM (127)            */
-            0x75, 0x08,     /*   REPORT_SIZE (8)                  */
-            0x95, 0x01,     /*   REPORT_COUNT (1)                 */
-            0x81, 0x06,     /*   INPUT (Data,Var,Rel)             */
-            0xC0 ,          /*   END_COLLECTION                   */
-            
-        0xC0            /*   END_COLLECTION                       */
-
+        0x05, 0x01, 
+        0x09, 0x06, 
+        0xA1, 0x01, 
+        0x85, 0x01, 
+        0x05, 0x07, 
+        0x19, 0xE0, 
+        0x29, 0xE7,
+        0x15, 0x00, 
+        0x25, 0x01, 
+        0x75, 0x01, 
+        0x95, 0x08, 
+        0x81, 0x02, 
+        0x95, 0x01, 
+        0x75, 0x08,
+        0x81, 0x03, 
+        0x95, 0x05,
+        0x75, 0x01, 
+        0x05, 0x08, 
+        0x19, 0x01, 
+        0x29, 0x05, 
+        0x91, 0x02,
+        0x95, 0x01, 
+        0x75, 0x03, 
+        0x91, 0x03, 
+        0x95, 0x05, 
+        0x75, 0x08, 
+        0x15, 0x00, 
+        0x25, 0x68,
+        0x05, 0x07, 
+        0x19, 0x00, 
+        0x29, 0x68, 
+        0x81, 0x00, 
+        0xC0, 
+        0x05, 0x0C, 
+        0x09, 0x01, 
+        0xA1, 0x01, 
+        0x85, 0x02, 
+        0x15, 0x00, 
+        0x26, 0xFF, 
+        0x02, 0x19, 
+        0x00, 0x2A, 
+        0xFF, 0x02, 
+        0x75, 0x10, 
+        0x95, 0x01, 
+        0x81, 0x00, 
+        0xC0, 
+        0x05, 0x01, 
+        0x09, 0x80, 
+        0xA1, 0x01, 
+        0x85, 0x03,
+        0x05, 0x01, 
+        0x19, 0x81, 
+        0x29, 0x83, 
+        0x15, 0x00, 
+        0x25, 0x01, 
+        0x95, 0x03, 
+        0x75, 0x01,
+        0x81, 0x02, 
+        0x95, 0x01, 
+        0x75, 0x05, 
+        0x81, 0x03, 
+        0xC0
 	},
 };
 
-struct f_hidg *g_hidg;
+/* hid descriptor for a keyboard */
+const struct hidg_func_descriptor hid_data_mouse = {
+	.subclass		= 1, /* No subclass */
+	.protocol		= 2, /* 1-Keyboard,2-mouse */
+	.report_length		= 64,
+	.report_desc_length = 58,
+	.report_desc        = {
+        0x05,0x01,
+        0x09,0x02,
+        0xA1,0x01,
+        0x09,0x01,
+        0xA1,0x00,
+        0x05,0x09,
+        0x19,0x01,
+        0x29,0x08,
+        0x15,0x00,
+        0x25,0x01,
+        0x75,0x01,
+        0x95,0x08,
+        0x81,0x02,
+        0x05,0x01,
+        0x09,0x30,
+        0x09,0x31,
+        0x16,0x01,
+        0xF8,0x26,
+        0xFF,0x07,
+        0x75,0x0C,
+        0x95,0x02,
+        0x81,0x06,
+        0x09,0x38,
+        0x15,0x81,
+        0x25,0x7F,
+        0x75,0x08,
+        0x95,0x01,
+        0x81,0x06,
+        0xC0,
+        0xC0
+	},
+};
 
 /*-------------------------------------------------------------------------*/
 /*                              Char Device                                */
@@ -292,7 +332,8 @@ static ssize_t f_hidg_read(struct file *file, char __user *buffer,
 static void f_hidg_req_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_hidg *hidg = (struct f_hidg *)ep->driver_data;
-
+    //printk("------req_complete------ status = %d\n",req->status);
+    hidg->write_pending = 0;
 	if (req->status != 0) {
         ;
 	}
@@ -301,151 +342,129 @@ static void f_hidg_req_complete(struct usb_ep *ep, struct usb_request *req)
 }
 
 #define WRITE_COND (!hidg->write_pending)
-static ssize_t f_hidg_write(struct file *file, const char __user *buffer,
-			    size_t count, loff_t *offp)
+
+typedef union report_data
 {
-#if 0
-	struct f_hidg *hidg  = file->private_data;
-	ssize_t status = -ENOMEM;
+	uint32_t d32;
+	struct 
+	{
+		unsigned len : 6;
+		unsigned index : 2;
+	} b;
+} report_data_t;
 
-	if (!access_ok(VERIFY_READ, buffer, count))
-		return -EFAULT;
-
-	mutex_lock(&hidg->lock);
-
-#define WRITE_COND (!hidg->write_pending)
-
-	/* write queue */
-	while (!WRITE_COND) {
-		mutex_unlock(&hidg->lock);
-		if (file->f_flags & O_NONBLOCK)
-			return -EAGAIN;
-
-		if (wait_event_interruptible_exclusive(
-				hidg->write_queue, WRITE_COND))
-			return -ERESTARTSYS;
-
-		mutex_lock(&hidg->lock);
-	}
-
-	count  = min_t(unsigned, count, hidg->report_length);
-	status = copy_from_user(hidg->req->buf, buffer, count);
-
-	if (status != 0) {
-		//ERROR(hidg->func.config->cdev,
-		//	"copy_from_user error\n");
-		mutex_unlock(&hidg->lock);
-		return -EINVAL;
-	}
-
-	hidg->req->status   = 0;
-	hidg->req->zero     = 0;
-	hidg->req->length   = count;
-	hidg->req->complete = f_hidg_req_complete;
-	hidg->req->context  = hidg;
-	hidg->write_pending = 1;
-
-	status = usb_ep_queue(hidg->in_ep, hidg->req, GFP_ATOMIC);
-	if (status < 0) {
-		//ERROR(hidg->func.config->cdev,
-		//	"usb_ep_queue error on int endpoint %zd\n", status);
-		hidg->write_pending = 0;
-		wake_up(&hidg->write_queue);
-	} else {
-		status = count;
-	}
-
-	mutex_unlock(&hidg->lock);
-#endif
-	return count;
-}
-
-
-static void f_hid_queue_report(u8 *data, int len)
+void queue_report_bh(unsigned long r_data)
 {
-    //this function will run in interrupt context 
+    report_data_t data ;
+    data.d32 = r_data;
     ssize_t status = -ENOMEM;
-    struct f_hidg *hidg = g_hidg;
-    //static char raw_report[8];
-    
-    if(hidg){
-        if(hidg->connected){
-            //mutex_lock(&hidg->lock);
-            memcpy(hidg->req->buf, data, len);
+    struct f_hidg *hidg = g_hidg[data.b.index];
+    if(hidg){    
+        //printk("###queue_report_bh connected = %d pending = %d\n",
+        //        g_hid_common.connected ,hidg->write_pending);        
+        if(g_hid_common.connected && !hidg->write_pending){
+            hidg->write_pending++;
         	hidg->req->status   = 0;
         	hidg->req->zero     = 0;
-        	hidg->req->length   = len;
-        	//hidg->req->buf      = raw_report;
+        	hidg->req->length   = data.b.len;
         	hidg->req->complete = f_hidg_req_complete;
         	hidg->req->context  = hidg;
 
             status = usb_ep_queue(hidg->in_ep, hidg->req, GFP_ATOMIC);
             if (status < 0) {
-            	//printk("usb_ep_queue error on int endpoint %zd\n", status);
+            	printk("usb_ep_queue error on int endpoint %d\n", status);
+            	hidg->write_pending--;
         	}
 	    }
-    //mutex_unlock(&hidg->lock);
-    }
+	    else if(g_hid_common.connected)
+	    {
+	        printk("hidg->write_pending %d\n",hidg->write_pending);
+            hidg->write_pending++;
+            if(hidg->write_pending > 3)
+            {
+                hidg->write_pending = 0;  
+            }
+	    }
+    }   
 }
+DECLARE_TASKLET(tsk_queue, queue_report_bh, 0);
 
 
-#define KBD_REPORT_ID (0x01)
-#define MOUSE_REPORT_ID (0x02)
-#define CONSUMER_REPORT_ID (0x03)
 
-unsigned int f_hid_bypass_input_get()
+static void f_hid_queue_report(u8 *data, int len, int index)
 {
-    if(!g_hidg)
-        return 0;
-    else
-        return bypass_input;
-}
-EXPORT_SYMBOL(f_hid_bypass_input_get);
+    report_data_t r_data;
+    //this function will run in interrupt context 
+    struct f_hidg *hidg = g_hidg[index];
 
-unsigned char kbd_idle[]     = {KBD_REPORT_ID,0,0,0,0,0,0,0,0};
-unsigned char mouse_idle[]   = {MOUSE_REPORT_ID,0,0,0,0,0};
-unsigned char consumer_idle[]= {CONSUMER_REPORT_ID,0,0};
+    if(!hidg || !hidg->req->buf)
+        return;
+    if(g_hid_common.suspend)
+        return;
+        
+    r_data.b.len= len;
+    r_data.b.index = index;
+    tsk_queue.data = r_data.d32;
+    memcpy(hidg->req->buf, data, len);
+    tasklet_schedule(&tsk_queue);
+    
+}
+
 
 static void f_hid_send_idle_report(void)
 {
-    if(g_hidg){
+    if(!g_hid_common.boot_protocol){
         mdelay(2);
-        f_hid_queue_report(kbd_idle, sizeof(kbd_idle));
+        f_hid_queue_report(kbd_idle, sizeof(kbd_idle),HIDG_INDEX_KBD);
         mdelay(2);
-        f_hid_queue_report(mouse_idle, sizeof(mouse_idle));
+        f_hid_queue_report(mouse_idle, sizeof(mouse_idle),HIDG_INDEX_MOUSE);
         mdelay(2);
-        f_hid_queue_report(consumer_idle, sizeof(consumer_idle));
+        f_hid_queue_report(consumer_idle, sizeof(consumer_idle),HIDG_INDEX_KBD);
+    }
+    else{
+        //send idle packet for boot protocol mode
     }
 }
+
+
+unsigned int f_hid_bypass_input_get(void)
+{
+    return g_hid_common.bypass_input;
+}
+EXPORT_SYMBOL(f_hid_bypass_input_get);
 
 static void f_hid_bypass_input_set(u8 bypass)
 {
-    if(g_hidg){
+    u8 current_state = f_hid_bypass_input_get();
 
-        u8 current_state = f_hid_bypass_input_get();
-
-        if( bypass && (!current_state))
-        {
-            bypass_input = 1;
-        }
-        if(!bypass && (current_state))
-        {
-            f_hid_send_idle_report();
-            bypass_input = 0;
-        }
+    if( bypass && (!current_state))
+    {
+        g_hid_common.bypass_input = 1;
+    }
+    if(!bypass && (current_state))
+    {
+        f_hid_send_idle_report();
+        g_hid_common.bypass_input = 0;
     }
 }
 
-void f_hid_wakeup()
+void f_hid_wakeup(void)
 {
-    g_hidg->u_cdev->gadget->ops->wakeup(g_hidg->u_cdev->gadget);
+        if( g_hidg[0] && g_hidg[0]->u_cdev )
+        if(g_hid_common.connected)
+            if(g_hid_common.allow_wakeup)
+            {
+                g_hidg[0]->u_cdev->gadget->ops->wakeup(g_hidg[0]->u_cdev->gadget);
+                g_hid_common.allow_wakeup = 0;
+            }
 }
 
 struct kbd_report {
     u8        id;
     u8        command;
     u8        reserved;
-    u8        key_array[6];
+    u8        key_array[5];
+    u8        reserved_1;
 }__attribute__ ((packed));
 
 struct consumer_report {
@@ -492,7 +511,7 @@ void f_hid_kbd_translate_report(struct hid_report *report, u8 *data)
             {
                 if(field->application == HID_GD_KEYBOARD)
                 {
-                    for(j = 0 ; j<(min(6,field->report_count)); j++)
+                    for(j = 0 ; j<(min(5,field->report_count)); j++)
                     {
                         k.key_array[j] = field->value[j];
                     }
@@ -503,25 +522,24 @@ void f_hid_kbd_translate_report(struct hid_report *report, u8 *data)
                     {
                         c.id = CONSUMER_REPORT_ID;
                         c.data = field->value[j];
-                        f_hid_queue_report((u8 *)&c, sizeof(c));
+                        f_hid_queue_report((u8 *)&c, sizeof(c),HIDG_INDEX_KBD);
                         return;
                     }
                 }
             }
         } 
-        if(g_hidg->boot_protocol)
-            f_hid_queue_report((u8 *)&k+1, sizeof(k)-1);
+        if(g_hid_common.boot_protocol)
+            f_hid_queue_report((u8 *)&k+1, sizeof(k)-1,HIDG_INDEX_KBD);
         else
         {
             f_hid_wakeup();
-            f_hid_queue_report((u8 *)&k, sizeof(k));
+            f_hid_queue_report((u8 *)&k, sizeof(k)-1,HIDG_INDEX_KBD);
         }
     }
 }
 EXPORT_SYMBOL(f_hid_kbd_translate_report);
 
 struct mouse_report {
-    u8        id:8;
     bool      button_left:1;
     bool      button_right:1;
     bool      button_middle:1;
@@ -540,13 +558,12 @@ struct mouse_report {
 void f_hid_mouse_translate_report(struct hid_report *report, u8 *data)
 {
 
-    if(f_hid_bypass_input_get() && !g_hidg->boot_protocol)
+    if(f_hid_bypass_input_get() && !g_hid_common.boot_protocol)
     {
         struct mouse_report m = {0};
         struct hid_field *field;
         
         int i,j;
-        m.id     = MOUSE_REPORT_ID;
         for (i = 0; i < report->maxfield; i++){
             field = report->field[i];
             for(j=0; j<field->report_count; j++)
@@ -585,22 +602,13 @@ void f_hid_mouse_translate_report(struct hid_report *report, u8 *data)
                     m.wheel= field->value[j];
             }
         }
+        f_hid_queue_report((u8 *)&m, sizeof(m),HIDG_INDEX_MOUSE);
         if(m.button_right || m.button_left)
             f_hid_wakeup();
-        f_hid_queue_report((u8 *)&m, sizeof(m));
     }
 }
 EXPORT_SYMBOL(f_hid_mouse_translate_report);
 
-#undef KBD_REPORT_ID
-#undef MOUSE_REPORT_ID
-#undef CONSUMER_REPORT_ID
-
-
-static unsigned int f_hidg_poll(struct file *file, poll_table *wait)
-{
-	return 0;
-}
 
 #undef WRITE_COND
 #undef READ_COND
@@ -623,35 +631,33 @@ static int f_hidg_open(struct inode *inode, struct file *fd)
 
 /*-------------------------------------------------------------------------*/
 /*                                usb_function                             */
-
 void hidg_connect()
 {
-    if(g_hidg)
-        g_hidg->connected = 1; 
+    g_hid_common.connected = 1; 
 }
 
 void hidg_disconnect()
 {
-    if(g_hidg){
-        g_hidg->connected = 0;
-    }
+    g_hid_common.connected = 0;
 }
 EXPORT_SYMBOL(hidg_disconnect);
-int hidg_start(struct usb_composite_dev *cdev);
 
 static void hidg_set_report_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_hidg *hidg = (struct f_hidg *)req->context;
     printk("hidg_set_report_complete ,req->status = %d len = %d\n",
     req->status,req->actual);
-	if (req->status != 0 || req->buf == NULL || req->actual == 0) {
-		return;
-	}
-    
+
 	spin_lock(&hidg->spinlock);
 
-    if(!hidg->connected)
+    if(!g_hid_common.connected)
         hidg_connect();
+    g_hid_common.suspend = 0;
+    g_hid_common.allow_wakeup = 0;
+	if (req->status != 0 || req->buf == NULL || req->actual == 0) {
+	    spin_unlock(&hidg->spinlock);
+		return;
+	}
     
 	hidg->set_report_buff = krealloc(hidg->set_report_buff,
 					 req->actual, GFP_ATOMIC);
@@ -700,98 +706,6 @@ static int hidg_setup(struct usb_function *f,
 		VDBG(cdev, "get_protocol\n");
 		goto stall;
 		break;
-
-	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
-		  | HID_REQ_SET_REPORT):
-		VDBG(cdev, "set_report | wLenght=%d\n", ctrl->wLength);
-		req->context  = hidg;
-		req->complete = hidg_set_report_complete;
-		goto respond;
-		break;
-
-	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
-		  | HID_REQ_SET_PROTOCOL):
-		VDBG(cdev, "set_protocol\n");
-		goto stall;
-		break;
-
-	case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_INTERFACE) << 8
-		  | USB_REQ_GET_DESCRIPTOR):
-		switch (value >> 8) {
-		case HID_DT_REPORT:
-			VDBG(cdev, "USB_REQ_GET_DESCRIPTOR: REPORT\n");
-			length = min_t(unsigned short, length,
-						   hidg->report_desc_length);
-			memcpy(req->buf, hidg->report_desc, length);
-			goto respond;
-			break;
-
-		default:
-			VDBG(cdev, "Unknown decriptor request 0x%x\n",
-				 value >> 8);
-			goto stall;
-			break;
-		}
-		break;
-
-	default:
-		VDBG(cdev, "Unknown request 0x%x\n",
-			 ctrl->bRequest);
-		goto stall;
-		break;
-	}
-
-stall:
-	return -EOPNOTSUPP;
-
-respond:
-	req->zero = 0;
-	req->length = length;
-	status = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
-	if (status < 0)
-		;//ERROR(cdev, "usb_ep_queue error on ep0 %d\n", value);
-	return status;
-}
-
-static int hidg_ctrlrequest(struct usb_composite_dev *cdev,
-		const struct usb_ctrlrequest *ctrl)
-{
-	struct f_hidg			*hidg = g_hidg;
-	struct usb_request		*req  = cdev->req;
-	int status = 0;
-	__u16 value, length;
-
-	value	= __le16_to_cpu(ctrl->wValue);
-	length	= __le16_to_cpu(ctrl->wLength);
-
-    /*
-	printk("hid_setup crtl_request : bRequestType:0x%x bRequest:0x%x "
-		"Value:0x%x\n", ctrl->bRequestType, ctrl->bRequest, value);
-    */
-	switch ((ctrl->bRequestType << 8) | ctrl->bRequest) {
-	case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
-		  | HID_REQ_GET_REPORT):
-		VDBG(cdev, "get_report\n");
-        return -EOPNOTSUPP;//this command bypass to rndis
-		/* send an empty report */
-		length = min_t(unsigned, length, hidg->report_length);
-		memset(req->buf, 0x0, length);
-		goto respond;
-		break;
-
-	case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
-		  | HID_REQ_GET_PROTOCOL):
-		VDBG(cdev, "get_protocol\n");
-		goto stall;
-		break;
-
-	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
-		  | HID_REQ_SET_REPORT):
-		VDBG(cdev, "set_report | wLenght=%d\n", ctrl->wLength);
-		req->context  = hidg;
-		req->complete = hidg_set_report_complete;
-		goto respond;
-		break;
 		
     case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
           | HID_REQ_SET_IDLE):
@@ -802,14 +716,24 @@ static int hidg_ctrlrequest(struct usb_composite_dev *cdev,
         break;
 
 	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
+		  | HID_REQ_SET_REPORT):
+		VDBG(cdev, "set_report | wLenght=%d\n", ctrl->wLength);
+		req->context  = hidg;
+		req->complete = hidg_set_report_complete;
+		goto respond;
+		break;
+
+	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
 		  | HID_REQ_SET_PROTOCOL):
 		VDBG(cdev, "set_protocol\n");
 		req->context  = hidg;
 		req->complete = hidg_set_report_complete;
-		hidg->boot_protocol = 1;
-		hidg_start(cdev);
+		g_hid_common.boot_protocol = !value;
+		printk("SET PROTOCOL - Value %d\n",value);
+		printk("SET PROTOCOL - Boot Protocol\n");
 		goto respond;
 		break;
+
 
 	case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_INTERFACE) << 8
 		  | USB_REQ_GET_DESCRIPTOR):
@@ -819,7 +743,6 @@ static int hidg_ctrlrequest(struct usb_composite_dev *cdev,
 			length = min_t(unsigned short, length,
 						   hidg->report_desc_length);
 			memcpy(req->buf, hidg->report_desc, length);
-			hidg->boot_protocol = 0;
 			goto respond;
 			break;
 
@@ -846,16 +769,38 @@ respond:
 	req->length = length;
 	status = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
 	if (status < 0)
-		;//ERROR(cdev, "usb_ep_queue error on ep0 %d\n", value);
+		printk("usb_ep_queue error on ep0 %d\n", value);
 	return status;
 }
 
 static void hidg_disable(struct usb_function *f)
 {
 	struct f_hidg *hidg = func_to_hidg(f);
-
 	usb_ep_disable(hidg->in_ep);
 	hidg->in_ep->driver_data = NULL;
+}
+
+void allow_wakeup(void)
+{
+    g_hid_common.allow_wakeup = 1;
+}
+DECLARE_DELAYED_WORK(dwork_wakeup, allow_wakeup);
+
+static void hidg_suspend(struct usb_function *f)
+{
+    printk("hidg : hidg_suspend\n");
+    if(!g_hid_common.suspend)
+    {
+        g_hid_common.suspend = 1;
+        schedule_delayed_work(&dwork_wakeup, 50);
+    }
+}
+
+static void hidg_resume(struct usb_function *f)
+{
+    printk("hidg : hidg_resume\n");
+    g_hid_common.suspend = 0;
+    g_hid_common.allow_wakeup = 0;
 }
 
 static int hidg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
@@ -865,14 +810,15 @@ static int hidg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	const struct usb_endpoint_descriptor	*ep_desc;
 	int status = 0;
 	VDBG(cdev, "hidg_set_alt intf:%d alt:%d\n", intf, alt);
-	
-    printk("^^^^^hidg_set_alt\n");
-
+	g_hid_common.boot_protocol = 0;
+	g_hid_common.suspend = 0;
+	printk("hidg_set_alt SET_PROTOCOL = Report Protocol\n");
 	if (hidg->in_ep != NULL) {
 		/* restart endpoint */
 		if (hidg->in_ep->driver_data != NULL)
-			usb_ep_disable(hidg->in_ep);
-
+		{
+            usb_ep_disable(hidg->in_ep);
+        }
 		ep_desc = ep_choose(f->config->cdev->gadget,
 				hidg->hs_in_ep_desc, hidg->fs_in_ep_desc);
 		status = usb_ep_enable(hidg->in_ep, ep_desc);
@@ -886,45 +832,17 @@ fail:
 	return status;
 }
 
-int hidg_start(struct usb_composite_dev *cdev)
-{
-    printk("^^^^^hidg_start\n");
-	struct f_hidg				*hidg = g_hidg;
-	const struct usb_endpoint_descriptor	*ep_desc;
-	int status = 0;
-
-	if (hidg->in_ep != NULL) {
-		/* restart endpoint */
-		if (hidg->in_ep->driver_data != NULL)
-			usb_ep_disable(hidg->in_ep);
-
-		ep_desc = ep_choose(cdev->gadget,
-				hidg->hs_in_ep_desc, hidg->fs_in_ep_desc);
-		status = usb_ep_enable(hidg->in_ep, ep_desc);
-		if (status < 0) {
-			printk("Enable endpoint FAILED!\n");
-			goto fail;
-		}
-		hidg->in_ep->driver_data = hidg;
-	}
-fail:
-	return status;
-}
-
-
 const struct file_operations f_hidg_fops = {
 	.owner		= THIS_MODULE,
 	.open		= f_hidg_open,
 	.release	= f_hidg_release,
 	.write		= NULL,//f_hidg_write,disable write to /dev/hidg0
 	.read		= f_hidg_read,
-	.poll		= NULL,//f_hidg_poll,
 	.llseek		= noop_llseek,
 };
 
 static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
-{
-    
+{   
 	struct usb_ep		*ep_in;
 	struct f_hidg		*hidg = func_to_hidg(f);
 	int			status;
@@ -957,10 +875,6 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
 	/* set descriptor dynamic values */
 	hidg_interface_desc.bInterfaceSubClass = hidg->bInterfaceSubClass;
 	hidg_interface_desc.bInterfaceProtocol = hidg->bInterfaceProtocol;
-//	hidg_hs_in_ep_desc.wMaxPacketSize = cpu_to_le16(hidg->report_length);
-//	hidg_fs_in_ep_desc.wMaxPacketSize = cpu_to_le16(hidg->report_length);
-//    hidg_hs_out_ep_desc.wMaxPacketSize = cpu_to_le16(hidg->report_length);
-//	hidg_fs_out_ep_desc.wMaxPacketSize = cpu_to_le16(hidg->report_length);
 	hidg_desc.desc[0].bDescriptorType = HID_DT_REPORT;
 	hidg_desc.desc[0].wDescriptorLength =
 		cpu_to_le16(hidg->report_desc_length);
@@ -989,8 +903,6 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
 		hidg->hs_in_ep_desc = NULL;
 	}
 
-    hidg->connected = 0;
-
 	mutex_init(&hidg->lock);
 	spin_lock_init(&hidg->spinlock);
 	init_waitqueue_head(&hidg->write_queue);
@@ -1014,7 +926,7 @@ fail:
 		if (hidg->in_ep != NULL)
 			usb_ep_free_request(hidg->in_ep, hidg->req);
 	}
-    g_hidg = NULL;
+    g_hidg[hidg->minor] = NULL;
 	usb_free_descriptors(f->hs_descriptors);
 	usb_free_descriptors(f->descriptors);
 
@@ -1045,7 +957,7 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 	kfree(hidg->set_report_buff);
 	kfree(hidg);
 	
-	g_hidg = NULL;
+	g_hidg[hidg->minor] = NULL;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1074,6 +986,7 @@ static struct usb_gadget_strings *ct_func_strings[] = {
 int hidg_bind_config(struct usb_configuration *c,
 			    const struct hidg_func_descriptor *fdesc, int index)
 {
+    printk("###hidg_bind_config###index %s\n",(index)? "HIDG_INDEX_MOUSE" : "HIDG_INDEX_KBD");
 	struct f_hidg *hidg;
 	int status;
 	if (index >= minors)
@@ -1092,9 +1005,8 @@ int hidg_bind_config(struct usb_configuration *c,
 	hidg = kzalloc(sizeof *hidg, GFP_KERNEL);
 	if (!hidg)
 		return -ENOMEM;
-	g_hidg = hidg;
-	hidg->boot_protocol = 1;
-	hidg->connected = 0;
+	g_hidg[index] = hidg;
+	g_hid_common.connected = 0;
 	hidg->minor = index;
 	hidg->bInterfaceSubClass = fdesc->subclass;
 	hidg->bInterfaceProtocol = fdesc->protocol;
@@ -1115,13 +1027,16 @@ int hidg_bind_config(struct usb_configuration *c,
 	hidg->func.set_alt = hidg_set_alt;
 	hidg->func.disable = hidg_disable;
 	hidg->func.setup   = hidg_setup;
+    hidg->func.suspend = hidg_suspend;
+    hidg->func.resume  = hidg_resume;
     
 	status = usb_add_function(c, &hidg->func);
+	
 	if (status)
 		kfree(hidg);
 	else
-        g_hidg = hidg;
-    g_hidg->u_cdev = c->cdev;
+        g_hidg[index] = hidg;
+    g_hidg[index]->u_cdev = c->cdev;
 	return status;
 }
 

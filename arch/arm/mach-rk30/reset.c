@@ -56,6 +56,10 @@ static void rk30_arch_reset(char mode, const char *cmd)
 #if defined(CONFIG_ARCH_RK3066B)
 	writel_relaxed(0x00070001 , RK30_CRU_BASE + CRU_CLKSELS_CON(1));
 #endif
+#if defined(CONFIG_RK29_WATCHDOG) && defined(CONFIG_ARCH_RK319X)
+	/* workaround for RK319X watchdog bug */
+	writel_relaxed(0, RK30_GRF_BASE + GRF_OS_REG0);
+#endif
 
         /* disable remap */
         writel_relaxed(1 << (12 + 16), RK30_GRF_BASE + GRF_SOC_CON0);

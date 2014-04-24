@@ -1262,7 +1262,7 @@ static const struct apll_clk_set apll_clks[] = {
 	_APLL_SET_CLKS(252 , 1, 84, 8, 2, 	21, 21, 21, 21, 11),
 	_APLL_SET_CLKS(216 , 1, 72, 8, 2, 	21, 21, 21, 21, 11),
 	_APLL_SET_CLKS(126 , 1, 84, 16, 2, 	11, 21, 11, 11, 11),
-	_APLL_SET_CLKS(48  , 1, 64, 32, 2, 	11, 11, 11, 11, 11),
+        _APLL_SET_CLKS(48,   1, 32, 16, 2,      11, 11, 11, 11, 11),
 	_APLL_SET_CLKS(0   , 1, 21, 4, 2, 	11, 11, 11, 11, 11),
 
 };
@@ -1354,9 +1354,16 @@ static int ddr_clk_set_rate(struct clk *c, unsigned long rate)
 
 static long ddr_clk_round_rate(struct clk *clk, unsigned long rate)
 {
-	CLKDATA_DBG("%s do nothing for ddr round rate\n", __func__);
-	return ddr_set_pll_rk3066b(rate / MHZ, 0) * MHZ;
+        unsigned long new_rate;
+
+        //function in ddr.c
+        new_rate = ddr_set_pll(rate / MHZ, 0) * MHZ;
+
+        CLKDATA_DBG("%s: round ddr rate from %lu to %lu\n", __func__,rate,new_rate);
+
+        return new_rate;
 }
+
 static unsigned long ddr_clk_recalc_rate(struct clk *clk)
 {
 	u32 shift = get_cru_bits(clk->clksel_con, clk->div_mask, clk->div_shift);
@@ -3016,7 +3023,7 @@ static struct clk_lookup clks[] = {
 	//PD_CLK(pd_cif1),
 	PD_CLK(pd_rga),
 	PD_CLK(pd_ipp),
-	//PD_CLK(pd_video),
+	PD_CLK(pd_video),
 	PD_CLK(pd_gpu),
 	//PD_CLK(pd_dbg),
 };

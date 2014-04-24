@@ -13,6 +13,18 @@ if INPUT_TOUCHSCREEN
 
 config CT36X_TS
 	tristate "CT36X touchscreens support"
+choice
+	prompt "ct36x chip select"
+	depends on CT36X_TS
+	default CT365_TS
+
+	config CT365_TS
+	  bool "ct365"
+	config CT363_TS
+	  bool "ct363"
+	config CT361_TS
+	  bool "ct360"
+endchoice
 
 config TOUCHSCREEN_GSLX680
 		tristate "gslX680 touchscreen panel support "
@@ -1115,4 +1127,8 @@ config ATMEL_MXT1386
                 default n
                 help
                   RK29 ATMEL_MXT1386 touch debug
+comment "zet62xx support" 
+source  "drivers/input/touchscreen/zet62xx/Kconfig"  
+comment "AW5X0X support" 
+source  "drivers/input/touchscreen/aw5x0x/Kconfig"
 endif

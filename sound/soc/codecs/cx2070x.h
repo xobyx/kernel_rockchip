@@ -15,7 +15,8 @@
 
 #define CONFIG_SND_DIGICOLOR_SOC_CHANNEL_VER_4_30F 1
 
-#ifdef CONFIG_SND_SOC_CNXT_FW_UPDATE
+//#ifdef CONFIG_SND_SOC_CNXT_FW_UPDATE
+#if 1
 #define CONFIG_SND_CX2070X_LOAD_FW 1
 #endif
 //#define CONFIG_SND_CX2070X_USE_FW_H 1
@@ -27,7 +28,7 @@
 //#define CONFIG_SND_CX2070X_GPIO_RESET    1
 #define CONFIG_SND_CXLIFEGUARD 1
 //#define CONFIG_CXNT_SOFTWOARE_SIMULATION      1
-#define  DBG_MONITOR_REG  1
+//#define  DBG_MONITOR_REG  1
 
 //#define GPIO_HP_JACKSENSE 178 //Tegra 250
 //.#define JACK_SENSE_GPIO_PIN    178 // Tegra
@@ -84,7 +85,7 @@ enum {
 
 #define CX2070X_I2C_DRIVER_NAME	"cx2070x-i2c"
 #define CX2070X_SPI_DRIVER_NAME	"cx2070x-spi"
-#define CX2070X_FIRMWARE_FILENAME "cnxt/cx2070x.fw"
+#define CX2070X_FIRMWARE_FILENAME "cx2070x.fw"
 #define AUDDRV_VERSION(major0,major1, minor, build ) ((major0)<<24|(major1)<<16| (minor)<<8 |(build))
 
 #endif 

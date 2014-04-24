@@ -158,6 +158,8 @@ static int ct36x_ts_probe(struct i2c_client *client, const struct i2c_device_id 
 		dev_err(&client->dev, "No memory for ct36x");
 		return -ENOMEM;
 	}
+	if(pdata->init_platform_hw)
+		pdata->init_platform_hw();
 	ts->model = pdata->model;
 	ts->x_max = pdata->x_max;
 	ts->y_max = pdata->y_max;

@@ -19,13 +19,19 @@
 #include <linux/err.h>
 #include <linux/version.h>
 #include <linux/slab.h>
+#include <linux/wakelock.h>
 #include <linux/workqueue.h>
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#endif /* CONFIG_HAS_EARLYSUSPEND */
 #include <linux/mfd/rt5025.h>
 #include <linux/power/rt5025-power.h>
 #include <linux/delay.h>
 
 static struct platform_device *dev_ptr;
-
+#ifndef CONFIG_RT5025_SUPPORT_ACUSB_DUALIN
+static int usbta_online = 0;
+#endif
 
 static enum power_supply_property rt5025_adap_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
@@ -35,8 +41,40 @@ static char *rt5025_supply_list[] = {
 	"rt5025-battery",
 };
 
+int rt5025_set_dcdc_tracking(struct i2c_client *i2c, int onoff)
+{
+	int ret;
+	if (onoff)
+		ret = rt5025_clr_bits(i2c, RT5025_REG_CHGCTL7, RT5025_DCDCTRACK_MASK);
+	else
+		ret = rt5025_set_bits(i2c, RT5025_REG_CHGCTL7, RT5025_DCDCTRACK_MASK);
+	return ret;
+}
+EXPORT_SYMBOL(rt5025_set_dcdc_tracking);
 
-int rt5025_set_charging_current_switch (struct i2c_client *i2c, int onoff)
+int rt5025_set_battery_detection(struct i2c_client *i2c, int onoff)
+{
+	int ret;
+	if (onoff)
+		ret = rt5025_set_bits(i2c, RT5025_REG_CHGCTL7, RT5025_CHGBATDEN_MASK);
+	else
+		ret = rt5025_clr_bits(i2c, RT5025_REG_CHGCTL7, RT5025_CHGBATDEN_MASK);
+	return ret;
+}
+EXPORT_SYMBOL(rt5025_set_battery_detection);
+
+int rt5025_set_charging_termination(struct i2c_client *i2c, int onoff)
+{
+	int ret;
+	if (onoff)
+		ret = rt5025_set_bits(i2c, RT5025_REG_CHGCTL2, RT5025_CHGTERM_MASK);
+	else
+		ret = rt5025_clr_bits(i2c, RT5025_REG_CHGCTL2, RT5025_CHGTERM_MASK);
+	return ret;
+}
+EXPORT_SYMBOL(rt5025_set_charging_termination);
+
+int rt5025_set_charging_current_switch(struct i2c_client *i2c, int onoff)
 {
 	int ret;
 	if (onoff)
@@ -90,15 +128,15 @@ int rt5025_charger_reset_and_reinit(struct rt5025_power_info *pi)
 	if (ret < 0)
 		return ret;
 	rt5025_reg_write(pi->i2c, RT5025_REG_CHGCTL4, ret|RT5025_CHGRST_MASK);
-	mdelay(200);
+	mdelay(400);
 
-	rt5025_reg_write(pi->i2c, RT5025_REG_CHGCTL2, pdata->power_data->CHGControl2.val);
 	rt5025_reg_write(pi->i2c, RT5025_REG_CHGCTL3, pdata->power_data->CHGControl3.val);
 	rt5025_reg_write(pi->i2c, RT5025_REG_CHGCTL4, pdata->power_data->CHGControl4.val);
 	rt5025_reg_write(pi->i2c, RT5025_REG_CHGCTL5, pdata->power_data->CHGControl5.val);
 	rt5025_reg_write(pi->i2c, RT5025_REG_CHGCTL6, pdata->power_data->CHGControl6.val);
 	//rt5025_reg_write(pi->i2c, RT5025_REG_CHGCTL7, pd->CHGControl7.val);
 	rt5025_assign_bits(pi->i2c, RT5025_REG_CHGCTL7, 0xEF, pdata->power_data->CHGControl7.val);
+	rt5025_reg_write(pi->i2c, RT5025_REG_CHGCTL2, pdata->power_data->CHGControl2.val);
 	rt5025_reg_write(pi->i2c, 0xA9, 0x60 );
 	return 0;
 }
@@ -146,15 +184,13 @@ static int rt5025_chgstat_changed(struct rt5025_power_info *info, unsigned new_v
 			#if 1
 			if (info->chip->battery_info)
 			{
-				if (info->chg_term <= 1)
+				if (info->chg_term == 0)
 					rt5025_gauge_set_status(info->chip->battery_info, POWER_SUPPLY_STATUS_CHARGING);
-				else if (info->chg_term == 2)
+				else if (info->chg_term == 1)
 				{
 					rt5025_gauge_set_status(info->chip->battery_info, POWER_SUPPLY_STATUS_FULL);
 					//info->chg_term = 0;
 				}
-				else if (info->chg_term > 2)
-					;
 			}
 			#else
 			if (info->event_callback)
@@ -168,7 +204,7 @@ static int rt5025_chgstat_changed(struct rt5025_power_info *info, unsigned new_v
 			if (info->chip->battery_info)
 			{
 				rt5025_gauge_set_status(info->chip->battery_info, POWER_SUPPLY_STATUS_CHARGING);
-				info->chg_term = 0;
+				//info->chg_term = 0;
 			}
 			#else
 			if (info->event_callback)
@@ -184,7 +220,7 @@ static int rt5025_chgstat_changed(struct rt5025_power_info *info, unsigned new_v
 			if (info->chip->battery_info)
 			{
 				rt5025_gauge_set_status(info->chip->battery_info, POWER_SUPPLY_STATUS_FULL);
-				info->chg_term = 0;
+				//info->chg_term = 0;
 			}
 			#else
 			if (info->event_callback)
@@ -200,15 +236,13 @@ static int rt5025_chgstat_changed(struct rt5025_power_info *info, unsigned new_v
 			#if 1
 			if (info->chip->battery_info)
 			{
-				if (info->chg_term <= 1)
+				if (info->chg_term == 0)
 					rt5025_gauge_set_status(info->chip->battery_info, POWER_SUPPLY_STATUS_CHARGING);
-				else if (info->chg_term == 2)
+				else if (info->chg_term  == 1)
 				{
 					rt5025_gauge_set_status(info->chip->battery_info, POWER_SUPPLY_STATUS_FULL);
 					//info->chg_term = 0;
 				}
-				else if (info->chg_term > 2)
-					;
 			}
 			#else
 			if (info->event_callback)
@@ -231,8 +265,10 @@ int rt5025_power_passirq_to_gauge(struct rt5025_power_info *info)
 EXPORT_SYMBOL(rt5025_power_passirq_to_gauge);
 #endif
 
-int rt5025_power_charge_detect(struct rt5025_power_info *info)
+static void power_detect_work_func(struct work_struct *work)
 {
+	struct delayed_work *delayed_work = (struct delayed_work *)container_of(work, struct delayed_work, work);
+	struct rt5025_power_info *info = (struct rt5025_power_info *)container_of(delayed_work, struct rt5025_power_info, power_detect_work);
 	int ret = 0;
 	unsigned char chgstatval = 0;
 	unsigned old_usbval, old_acval, old_chgval, new_usbval, new_acval, new_chgval;
@@ -241,13 +277,13 @@ int rt5025_power_charge_detect(struct rt5025_power_info *info)
 	old_usbval = info->usb_online;
 	old_chgval = info->chg_stat;
 
-	mdelay(50);
+	mdelay(10);
 	
 	ret = rt5025_reg_read(info->i2c, RT5025_REG_CHGSTAT);
 	if (ret<0)
 	{
 		dev_err(info->dev, "read chg stat reg fail\n");
-		return ret;
+		return;
 	}
 	chgstatval = ret;
 	RTINFO("chgstat = 0x%02x\n", chgstatval);
@@ -269,6 +305,14 @@ int rt5025_power_charge_detect(struct rt5025_power_info *info)
 		0:(chgstatval&RT5025_CHG_USBONLINE)>>RT5025_CHG_USBSHIFT);
 	if (old_usbval != new_usbval)
 	{
+		#ifndef CONFIG_RT5025_SUPPORT_ACUSB_DUALIN
+		if (!new_usbval && usbta_online)
+		{
+			usbta_online = 0;
+			power_supply_changed(&info->ac);
+		}
+		RTINFO("usbta_online=%d\n", usbta_online);
+		#endif
 		info->usb_online = new_usbval;
 		power_supply_changed(&info->usb);
 	}
@@ -282,8 +326,10 @@ int rt5025_power_charge_detect(struct rt5025_power_info *info)
 	//if (old_acval != new_acval || old_usbval != new_usbval)
 	if (new_acval || new_usbval)
 	{
+		//if (new_usbval)
+		//	wake_lock_timeout(&info->usb_wake_lock, 10*HZ);
 		info->usb_cnt = 0;
-		schedule_delayed_work(&info->usb_detect_work, 0); //no delay
+		schedule_delayed_work(&info->usb_detect_work, msecs_to_jiffies(10)); //no delay
 	}
 
 	new_chgval = (chgstatval&RT5025_CHGSTAT_MASK)>>RT5025_CHGSTAT_SHIFT;
@@ -312,8 +358,12 @@ int rt5025_power_charge_detect(struct rt5025_power_info *info)
 			info->event_callback->rt5025_gauge_set_status(POWER_SUPPLY_STATUS_NOT_CHARGING);
 		#endif
 	}
+}
 
-	return ret;
+int rt5025_power_charge_detect(struct rt5025_power_info *info)
+{
+	schedule_delayed_work(&info->power_detect_work, 0);
+	return 0;
 }
 EXPORT_SYMBOL(rt5025_power_charge_detect);
 
@@ -326,7 +376,14 @@ static int rt5025_adap_get_props(struct power_supply *psy,
 	{
 		case POWER_SUPPLY_PROP_ONLINE:
 			if (psy->type == POWER_SUPPLY_TYPE_MAINS)
+			{
+				#ifndef CONFIG_RT5025_SUPPORT_ACUSB_DUALIN
+				RTINFO("usbta_online=%d\n", usbta_online);
+				val->intval = usbta_online?1:info->ac_online;
+				#else
 				val->intval = info->ac_online;
+				#endif
+			}
 			else if (psy->type == POWER_SUPPLY_TYPE_USB)
 				val->intval = info->usb_online;
 			else
@@ -341,11 +398,14 @@ static int rt5025_adap_get_props(struct power_supply *psy,
 
 extern int dwc_vbus_status(void);
 
-
 static void usb_detect_work_func(struct work_struct *work)
 {
 	struct delayed_work *delayed_work = (struct delayed_work *)container_of(work, struct delayed_work, work);
 	struct rt5025_power_info *pi = (struct rt5025_power_info *)container_of(delayed_work, struct rt5025_power_info, usb_detect_work);
+	#ifndef CONFIG_RT5025_SUPPORT_ACUSB_DUALIN
+	int old_usbta_online = usbta_online;
+	int new_usbta_online;
+	#endif
 	
 	RTINFO("rt5025: %s ++", __func__);
 
@@ -362,13 +422,26 @@ static void usb_detect_work_func(struct work_struct *work)
 		switch(dwc_vbus_status())
 		{
 			case 2: // USB Wall charger
+				#ifndef CONFIG_RT5025_SUPPORT_ACUSB_DUALIN
+				new_usbta_online = 1;
+				#endif
 				rt5025_set_charging_current(pi->i2c, 2000);
 				rt5025_notify_charging_cable(pi->chip->jeita_info, JEITA_USB_TA);
+				#ifndef CONFIG_RT5025_SUPPORT_ACUSB_DUALIN
+				if (old_usbta_online != new_usbta_online)
+				{
+					usbta_online = new_usbta_online;
+					if (new_usbta_online)
+						power_supply_changed(&pi->ac);
+						
+				}
+				RTINFO("usbta_online=%d\n", usbta_online);
+				#endif
 				RTINFO("rt5025: detect usb wall charger\n");
 				break;
 			case 1: //normal USB
 			default:
-				rt5025_set_charging_current(pi->i2c, 2000);
+				rt5025_set_charging_current(pi->i2c, 500);
 				rt5025_notify_charging_cable(pi->chip->jeita_info, JEITA_NORMAL_USB);
 				RTINFO("rt5025: detect normal usb\n");
 				break;
@@ -403,13 +476,14 @@ static int __devinit rt5025_init_charger(struct rt5025_power_info *info, struct 
 	//rt5025_set_bits(info->i2c, RT5025_REG_CHGCTL4, RT5025_CHGRST_MASK);
 	//udelay(200);
 	//init register setting
-	rt5025_reg_write(info->i2c, RT5025_REG_CHGCTL2, pd->CHGControl2.val);
+	rt5025_reg_write(info->i2c, RT5025_REG_CHGCTL2, pd->CHGControl2.val&(~RT5025_CHGTERM_MASK));
 	rt5025_reg_write(info->i2c, RT5025_REG_CHGCTL3, pd->CHGControl3.val);
 	rt5025_reg_write(info->i2c, RT5025_REG_CHGCTL4, pd->CHGControl4.val);
 	rt5025_reg_write(info->i2c, RT5025_REG_CHGCTL5, pd->CHGControl5.val);
 	rt5025_reg_write(info->i2c, RT5025_REG_CHGCTL6, pd->CHGControl6.val);
 	//rt5025_reg_write(info->i2c, RT5025_REG_CHGCTL7, pd->CHGControl7.val);
 	rt5025_assign_bits(info->i2c, RT5025_REG_CHGCTL7, 0xEF, pd->CHGControl7.val);
+	rt5025_reg_write(info->i2c, RT5025_REG_CHGCTL2, pd->CHGControl2.val);
 	rt5025_reg_write(info->i2c, 0xA9, 0x60 );
 	//Special buck setting
 	#if 0
@@ -432,6 +506,23 @@ static int __devinit rt5025_init_charger(struct rt5025_power_info *info, struct 
 	return 0;
 }
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void rt5025_power_earlysuspend(struct early_suspend *h)
+{
+	RTINFO("\n");
+}
+
+static void rt5025_power_earlyresume(struct early_suspend *h)
+{
+	#if 0
+	struct rt5025_power_info *pi;
+	pi = container_of(h, struct rt5025_power_info, early_suspend);
+	rt5025_power_charge_detect(pi);
+	#endif
+	RTINFO("\n");
+}
+#endif /* CONFIG_HAS_EARLYSUSPEND */
+
 static int __devinit rt5025_power_probe(struct platform_device *pdev)
 {
 	struct rt5025_chip *chip = dev_get_drvdata(pdev->dev.parent);
@@ -448,6 +539,8 @@ static int __devinit rt5025_power_probe(struct platform_device *pdev)
 	pi->chip = chip;
 	mutex_init(&pi->var_lock);
 	INIT_DELAYED_WORK(&pi->usb_detect_work, usb_detect_work_func);
+	INIT_DELAYED_WORK(&pi->power_detect_work, power_detect_work_func);
+	wake_lock_init(&pi->usb_wake_lock, WAKE_LOCK_SUSPEND, "rt-usb-wake");
 
 	#if 0
 	ret = rt5025_gauge_init(pi);
@@ -480,6 +573,13 @@ static int __devinit rt5025_power_probe(struct platform_device *pdev)
 
 	rt5025_init_charger(pi, pdata->power_data);
 	chip->power_info = pi;
+
+	#ifdef CONFIG_HAS_EARLYSUSPEND
+	pi->early_suspend.level = EARLY_SUSPEND_LEVEL_DISABLE_FB + 1;
+	pi->early_suspend.suspend = rt5025_power_earlysuspend;
+	pi->early_suspend.resume = rt5025_power_earlyresume;
+	register_early_suspend(&pi->early_suspend);
+	#endif /* CONFIG_HAS_EARLYSUSPEND */
 
 	pr_info("rt5025-power driver is successfully loaded\n");
 
@@ -550,7 +650,7 @@ static int __init rt5025_power_init(void)
 {
 	return platform_driver_register(&rt5025_power_driver);
 }
-late_initcall_sync(rt5025_power_init);
+fs_initcall_sync(rt5025_power_init);
 
 static void __exit rt5025_power_exit(void)
 {

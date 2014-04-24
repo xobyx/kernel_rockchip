@@ -47,7 +47,7 @@ QUICK_TRANSFER用于快速传输，同时可指定半双工或全双工，
 #define DBG(x...)
 #endif
 
-#define DMA_BUFFER_SIZE PAGE_SIZE
+#define DMA_BUFFER_SIZE (PAGE_SIZE<<4)
 #define DMA_MIN_BYTES 32 //>32x16bits FIFO
 
 
@@ -142,26 +142,26 @@ static void printk_transfer_data(unsigned char *buf, int len)
 }
 #endif
 
-#if 0
+#if 1
 static void spi_dump_regs(struct rk29xx_spi *dws) {
-	DBG("MRST SPI0 registers:\n");
-	DBG("=================================\n");
-	DBG("CTRL0: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_CTRLR0));
-	DBG("CTRL1: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_CTRLR1));
-	DBG("SSIENR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_ENR));
-	DBG("SER: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_SER));
-	DBG("BAUDR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_BAUDR));
-	DBG("TXFTLR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_TXFTLR));
-	DBG("RXFTLR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_RXFTLR));
-	DBG("TXFLR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_TXFLR));
-	DBG("RXFLR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_RXFLR));
-	DBG("SR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_SR));
-	DBG("IMR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_IMR));
-	DBG("ISR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_ISR));
-	DBG("DMACR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_DMACR));
-	DBG("DMATDLR: \t0x%08x\n", rk29xx_readl(dws, SPIM_DMATDLR));
-	DBG("DMARDLR: \t0x%08x\n", rk29xx_readl(dws, SPIM_DMARDLR));
-	DBG("=================================\n");
+	printk("MRST SPI0 registers:\n");
+	printk("=================================\n");
+	printk("CTRL0: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_CTRLR0));
+	printk("CTRL1: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_CTRLR1));
+	printk("SSIENR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_ENR));
+	printk("SER: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_SER));
+	printk("BAUDR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_BAUDR));
+	printk("TXFTLR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_TXFTLR));
+	printk("RXFTLR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_RXFTLR));
+	printk("TXFLR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_TXFLR));
+	printk("RXFLR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_RXFLR));
+	printk("SR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_SR));
+	printk("IMR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_IMR));
+	printk("ISR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_ISR));
+	printk("DMACR: \t\t0x%08x\n", rk29xx_readl(dws, SPIM_DMACR));
+	printk("DMATDLR: \t0x%08x\n", rk29xx_readl(dws, SPIM_DMATDLR));
+	printk("DMARDLR: \t0x%08x\n", rk29xx_readl(dws, SPIM_DMARDLR));
+	printk("=================================\n");
 
 }
 #endif
@@ -422,6 +422,66 @@ static int u16_reader(struct rk29xx_spi *dws)
 	return dws->rx == dws->rx_end;
 }
 
+
+/* Return the max entries we can fill into tx fifo */
+static inline u32 tx_max(struct rk29xx_spi *dws)
+{
+	u32 tx_left, tx_room, rxtx_gap;
+
+	tx_left = (dws->tx_end - dws->tx) / dws->n_bytes;
+	tx_room = dws->fifo_len - rk29xx_readw(dws, SPIM_TXFLR);
+
+	return min(tx_left, tx_room);
+}
+
+/* Return the max entries we should read out of rx fifo */
+static inline u32 rx_max(struct rk29xx_spi *dws)
+{
+	u32 rx_left = (dws->rx_end - dws->rx) / dws->n_bytes;
+
+	return min(rx_left, (u32)rk29xx_readw(dws, SPIM_RXFLR));
+}
+
+static void dw_writer(struct rk29xx_spi *dws)
+{
+	u32 max = tx_max(dws);
+	u16 txw = 0;
+
+	DBG("%s:max=%d\n",__func__,max);
+
+	while (max--) {
+		/* Set the tx word if the transfer's original "tx" is not null */
+		if (dws->tx_end - dws->len) {
+			if (dws->n_bytes == 1)
+				txw = *(u8 *)(dws->tx);
+			else
+				txw = *(u16 *)(dws->tx);
+		}
+		rk29xx_writew(dws, SPIM_TXDR, txw);
+		dws->tx += dws->n_bytes;
+	}
+}
+
+static void dw_reader(struct rk29xx_spi *dws)
+{
+	u32 max = rx_max(dws);
+	u16 rxw;
+
+	while (max--) {
+		rxw = rk29xx_readw(dws, SPIM_RXDR);
+		/* Care rx only if the transfer's original "rx" is not null */
+		if (dws->rx_end - dws->len) {
+			if (dws->n_bytes == 1)
+				*(u8 *)(dws->rx) = rxw;
+			else
+				*(u16 *)(dws->rx) = rxw;
+		}
+		dws->rx += dws->n_bytes;
+	}
+}
+
+
+
 static void *next_transfer(struct rk29xx_spi *dws)
 {
 	struct spi_message *msg = dws->cur_msg;
@@ -443,8 +503,6 @@ static void rk29_spi_dma_rxcb(void *buf_id,
 {
 	struct rk29xx_spi *dws = buf_id;
 	unsigned long flags;
-
-	DBG("func: %s, line: %d\n", __FUNCTION__, __LINE__);
 	
 	spin_lock_irqsave(&dws->lock, flags);
 
@@ -470,10 +528,13 @@ static void rk29_spi_dma_rxcb(void *buf_id,
 	if (!(dws->state & TXBUSY))
 	{
 		//complete(&dws->xfer_completion);	
-		DBG("func: %s, line: %d,dma transfer complete\n", __FUNCTION__, __LINE__);
+		DBG("func: %s, line: %d,dma transfer complete,state=0x%x\n", __FUNCTION__, __LINE__,dws->state);
 		//DMA could not lose intterupt
 		transfer_complete(dws);
 	}
+
+	
+	DBG("func: %s, line: %d,state=0x%x,res=0x%x\n", __FUNCTION__, __LINE__,dws->state,res);
 
 }
 
@@ -483,7 +544,6 @@ static void rk29_spi_dma_txcb(void *buf_id,
 	struct rk29xx_spi *dws = buf_id;
 	unsigned long flags;
 
-	DBG("func: %s, line: %d\n", __FUNCTION__, __LINE__);
 	
 	spin_lock_irqsave(&dws->lock, flags);
 
@@ -499,10 +559,13 @@ static void rk29_spi_dma_txcb(void *buf_id,
 	{
 		//complete(&dws->xfer_completion);
 		
-		DBG("func: %s, line: %d,dma transfer complete\n", __FUNCTION__, __LINE__);
+		DBG("func: %s, line: %d,dma transfer complete,state=0x%x\n", __FUNCTION__, __LINE__, dws->state);
 		//DMA could not lose intterupt
 		transfer_complete(dws);
 	}
+
+	
+	DBG("func: %s, line: %d,state=0x%x,res=0x%x\n", __FUNCTION__, __LINE__,dws->state,res);
 
 }
 
@@ -680,13 +743,15 @@ static irqreturn_t interrupt_transfer(struct rk29xx_spi *dws)
 	if (irq_status & (SPI_INT_TXOI | SPI_INT_RXOI | SPI_INT_RXUI)) {
 		rk29xx_writew(dws, SPIM_ICR, SPI_CLEAR_INT_TXOI | SPI_CLEAR_INT_RXOI | SPI_CLEAR_INT_RXUI);
 		int_error_stop(dws, "interrupt_transfer: fifo overrun");
-		mutex_unlock(&dws->dma_lock);	
+		printk("%s:irq_status=0x%x\n",__func__,irq_status);
 		return IRQ_HANDLED;
 	}
 
+	DBG("%s:0x%x\n",__func__,irq_status);
+
 	if (irq_status & SPI_INT_TXEI) {
 		spi_mask_intr(dws, SPI_INT_TXEI);
-
+#if 0
 		left = (dws->tx_end - dws->tx) / dws->n_bytes;
 		left = (left > int_level) ? int_level : left;
 
@@ -694,6 +759,9 @@ static irqreturn_t interrupt_transfer(struct rk29xx_spi *dws)
 			dws->write(dws);
 			wait_till_not_busy(dws);
 		}
+#else
+		dw_writer(dws);
+#endif
 		if (dws->rx) {
 		    dws->read(dws);
 		}
@@ -988,7 +1056,8 @@ static void dma_transfer(struct rk29xx_spi *dws)
 	//unsigned long flags;
 	//int ms;
 	int iRet;
-	//int burst;
+	int burst = 1;
+	int level = 8;
 	u8 bits = 0;
 	u8 spi_dfs = 0;
 	u8 cs_change = 0;
@@ -1142,10 +1211,18 @@ static void dma_transfer(struct rk29xx_spi *dws)
 		spi_chip_sel(dws, spi->chip_select);
 		/* Set the interrupt mask, for poll mode just diable all int */
 		spi_mask_intr(dws, 0xff);
+
+		if ((dws->cur_transfer->len % 16) == 0) {
+			level = 16;
+		}
+		else
+		{
+			level = 16;
+		}
 		
 		if (transfer->tx_buf != NULL) {
 			dmacr |= SPI_DMACR_TX_ENABLE;
-			rk29xx_writew(dws, SPIM_DMATDLR, 0);
+			rk29xx_writew(dws, SPIM_DMATDLR, level);		
 		}
 		if (transfer->rx_buf != NULL) {
 			dmacr |= SPI_DMACR_RX_ENABLE;
@@ -1156,6 +1233,8 @@ static void dma_transfer(struct rk29xx_spi *dws)
 		spi_enable_chip(dws, 1);
 		if (cs_change)
 			dws->prev_chip = chip;
+		
+		DBG("%s:reprogram registers\n",__func__);
 	} 
 
 	//INIT_COMPLETION(dws->xfer_completion);
@@ -1176,19 +1255,23 @@ static void dma_transfer(struct rk29xx_spi *dws)
 		printk("dma tx:");
 		printk_transfer_data(dws->buffer_tx_dma, dws->cur_transfer->len);
 		#endif
-		/*if (transfer->len & 0x3) {
-			burst = 1;
+		//if ((dws->cur_transfer->len % 16) == 0) {
+		//	burst = 16;
+		//}
+		//else
+		if ((dws->cur_transfer->len % 8) == 0) {
+			burst = 8;
 		}
 		else {
-			burst = 4;
+			burst = 1;
 		}
-		if (rk29_dma_config(dws->tx_dmach, burst)) {*/
-		if (rk29_dma_config(dws->tx_dmach, dws->dma_width, 1)) {//there is not dma burst but bitwide, set it 1 alwayss
+		
+		if (rk29_dma_config(dws->tx_dmach, dws->dma_width, burst)) {
 			dev_err(&dws->master->dev, "function: %s, line: %d\n", __FUNCTION__, __LINE__);
 			goto err_out;
 		}
 		
-		rk29_dma_ctrl(dws->tx_dmach, RK29_DMAOP_FLUSH);	
+		//rk29_dma_ctrl(dws->tx_dmach, RK29_DMAOP_FLUSH);	
 		
 		iRet = rk29_dma_enqueue(dws->tx_dmach, (void *)dws,
 					dws->tx_dma, transfer->len);
@@ -1213,7 +1296,7 @@ static void dma_transfer(struct rk29xx_spi *dws)
 			goto err_out;
 		}
 
-		rk29_dma_ctrl(dws->rx_dmach, RK29_DMAOP_FLUSH);	
+		//rk29_dma_ctrl(dws->rx_dmach, RK29_DMAOP_FLUSH);	
 		
 		iRet = rk29_dma_enqueue(dws->rx_dmach, (void *)dws,
 					dws->rx_dma, transfer->len);
@@ -1233,6 +1316,9 @@ static void dma_transfer(struct rk29xx_spi *dws)
 	return;
 
 err_out:
+	spi_dump_regs(dws);
+	
+	printk("%s:giveback\n",__func__);
 	giveback(dws);
 	return;
 

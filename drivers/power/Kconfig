@@ -377,6 +377,21 @@ config POWER_RT5025
 	help
 	  Enable RT5025 Power/Gauge part driver.
 
+config BATTERY_RK818
+       bool "RK818 Battery driver"
+       depends on MFD_RK818
+       default n
+       help
+	 Support for RK818 Battery driver.
+	 This driver can give support for Rk818 Battery Charge Interface.
+	
+config RT5025_SUPPORT_ACUSB_DUALIN
+	bool "RT5025 AC/USB Dualin Option"
+	depends on POWER_RT5025
+	default n
+	help
+	  Enable RT5025 Power DualIn.
+
 config CHARGER_SMB347
 	tristate "Summit Microelectronics SMB347 Battery Charger"
 	depends on I2C

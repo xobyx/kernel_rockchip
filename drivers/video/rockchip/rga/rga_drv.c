@@ -792,6 +792,9 @@ static int rga_blit(rga_session *session, struct rga_req *req)
     daw = req->dst.act_w;
     dah = req->dst.act_h;
 
+    if (req->scale_mode == 1 && req->src.format == 0xa && req->sina != 0 && req->cosa != 0x10000)
+        req->scale_mode = 2;
+
     do
     {
         if((req->render_mode == bitblt_mode) && (((saw>>1) >= daw) || ((sah>>1) >= dah)))
@@ -1385,22 +1388,22 @@ void rga_test_0(void)
     printk("************ RGA_TEST ************\n");
     printk("********************************\n\n");
 
-    req.src.act_w = 1024;
-    req.src.act_h = 600;
+    req.src.act_w = 320;
+    req.src.act_h = 240;
 
-    req.src.vir_w = 1024;
-    req.src.vir_h = 600;
+    req.src.vir_w = 320;
+    req.src.vir_h = 240;
     req.src.yrgb_addr = (uint32_t)virt_to_phys(src);
     req.src.uv_addr = (uint32_t)(req.src.yrgb_addr + 1080*1920);
     req.src.v_addr = (uint32_t)virt_to_phys(src);
-    req.src.format = RK_FORMAT_RGBA_8888;
+    req.src.format = RK_FORMAT_YCbCr_420_SP;
 
-    req.dst.act_w = 600;
-    req.dst.act_h = 352;
+    req.dst.act_w = 240;
+    req.dst.act_h = 160;
 
-    req.dst.vir_w = 1280;
-    req.dst.vir_h = 800;
-    req.dst.x_offset = 600;
+    req.dst.vir_w = 240;
+    req.dst.vir_h = 160;
+    req.dst.x_offset = 0;
     req.dst.y_offset = 0;
 
     dst = dst0;
@@ -1410,22 +1413,22 @@ void rga_test_0(void)
     //req.dst.format = RK_FORMAT_RGB_565;
 
     req.clip.xmin = 0;
-    req.clip.xmax = 1279;
+    req.clip.xmax = 239;
     req.clip.ymin = 0;
-    req.clip.ymax = 799;
+    req.clip.ymax = 159;
 
     //req.render_mode = color_fill_mode;
     //req.fg_color = 0x80ffffff;
 
     req.rotate_mode = 1;
-    //req.scale_mode = 2;
+    req.scale_mode = 2;
 
     //req.alpha_rop_flag = 0;
     //req.alpha_rop_mode = 0x19;
     //req.PD_mode = 3;
 
-    req.sina = 65536;
-    req.cosa = 0;
+    req.sina = 0;
+    req.cosa = 65536;
 
     //req.mmu_info.mmu_flag = 0x21;
     //req.mmu_info.mmu_en = 1;
@@ -1465,7 +1468,7 @@ void rga_test_0(void)
 
     fb->fix.smem_start = virt_to_phys(dst);
 
-    rk_direct_fb_show(fb);
+    //rk_direct_fb_show(fb);
     #endif
 
 }

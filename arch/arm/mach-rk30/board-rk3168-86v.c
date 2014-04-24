@@ -472,7 +472,11 @@ static struct sensor_platform_data mxc6225_info = {
         .irq_enable = 0,
         .poll_delay_ms = 30,
         .init_platform_hw = mxc6225_init_platform_hw,
+#if defined(CONFIG_ANDROID_KITKAT)
+        .orientation = { 0, -1, 0, -1, 0, 0, 0, 0, 1},//mxc6225 only report x and y
+#else
         .orientation = { -1, 0, 0, 0, -1, 0, 0, 0, 1},//mxc6225 only report x and y
+#endif		
 };
 #endif
 
@@ -1370,7 +1374,7 @@ struct platform_device rk_device_gps = {
 	};
 #endif
 
-#if defined(CONFIG_MT5931_MT6622)
+#if defined(CONFIG_MT5931_MT6622) || defined(CONFIG_MTK_MT6622)
 static struct mt6622_platform_data mt6622_platdata = {
 		    .power_gpio         = { // BT_REG_ON
 		    	.io             = RK30_PIN3_PC7, // set io to INVALID_GPIO for disable it
@@ -1468,7 +1472,7 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_GPS_RK
 	&rk_device_gps,
 #endif
-#ifdef CONFIG_MT5931_MT6622
+#if defined(CONFIG_MT5931_MT6622) || defined(CONFIG_MTK_MT6622)
 	&device_mt6622,
 #endif
 #ifdef CONFIG_TCC_BT_DEV
@@ -2237,7 +2241,8 @@ static void __init rk30_i2c_register_board_info(void)
 //end of i2c
 #define USB_INSERT_FAKE_SHUTDOWN
 #if defined(USB_INSERT_FAKE_SHUTDOWN)
-extern int rk30_pm_enter(suspend_state_t state);
+int rk30_pm_enter(suspend_state_t state)
+{}
 int __sramdata charge_power_off = 0;
 
 static void rk30_charge_deal(void)
@@ -2321,7 +2326,7 @@ static void __init machine_rk30_board_init(void)
 	gpio_request(POWER_ON_PIN, "poweronpin");
 	gpio_direction_output(POWER_ON_PIN, GPIO_HIGH);
 	
-	//pm_power_off = rk30_pm_power_off;
+	pm_power_off = rk30_pm_power_off;
 	
         gpio_direction_output(POWER_ON_PIN, GPIO_HIGH);
 
@@ -2340,7 +2345,7 @@ static void __init machine_rk30_board_init(void)
 	    clk_set_rate(clk_get_sys("rk_serial.1", "uart"), 48*1000000);
 #endif
 
-#if defined(CONFIG_MT5931_MT6622)
+#if defined(CONFIG_MT5931_MT6622) || defined(CONFIG_MTK_MT6622)
 		clk_set_rate(clk_get_sys("rk_serial.0", "uart"), 24*1000000);
 #endif		
 }

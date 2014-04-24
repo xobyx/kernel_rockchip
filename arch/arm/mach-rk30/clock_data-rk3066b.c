@@ -1148,8 +1148,16 @@ static int ddr_clk_set_rate(struct clk *c, unsigned long rate)
 
 static long ddr_clk_round_rate(struct clk *clk, unsigned long rate)
 {
-	return ddr_set_pll_rk3066b(rate / MHZ, 0) * MHZ;
+	unsigned long new_rate;
+
+	//function in ddr.c
+	new_rate = ddr_set_pll(rate / MHZ, 0) * MHZ;
+
+	CLKDATA_DBG("%s: round ddr rate from %lu to %lu\n", __func__,rate,new_rate);
+
+	return new_rate;
 }
+
 static unsigned long ddr_clk_recalc_rate(struct clk *clk)
 {
 	u32 shift = get_cru_bits(clk->clksel_con, clk->div_mask, clk->div_shift);

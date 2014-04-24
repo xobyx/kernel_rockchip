@@ -83,6 +83,7 @@
 
 struct rk2928_codec_pdata {
 	int	hpctl;
+	int	spkctl_level;
 	int (*hpctl_io_init)(void);	
 };
 

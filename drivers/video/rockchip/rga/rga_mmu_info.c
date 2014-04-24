@@ -435,64 +435,90 @@ static int rga_mmu_info_BitBlt_mode(struct rga_reg *reg, struct rga_req *req)
             break;
         }
 
-        if(req->src.yrgb_addr < KERNEL_SPACE_VALID)
-        {
-            ret = rga_MapUserMemory(&pages[0], &MMU_Base[0], SrcStart, SrcMemSize);
-            if (ret < 0) {
-                pr_err("rga map src memory failed\n");
-                status = ret;
-                break;
+        if ((req->mmu_info.mmu_flag >> 31) & 1) {
+            if ((req->mmu_info.mmu_flag >> 8) & 1) {
+                ret = rga_MapUserMemory(&pages[0], &MMU_Base[0], SrcStart, SrcMemSize);
+                if (ret < 0) {
+                    pr_err("rga map src memory failed\n");
+                    status = ret;
+                    break;
+                }
+            }
+            else {
+                MMU_p = MMU_Base;
+
+                if(req->src.yrgb_addr == (uint32_t)rga_service.pre_scale_buf) {
+                    /* Down scale ratio over 2, Last prc    */
+                    /* MMU table copy from pre scale table  */
+
+                    for(i=0; i<SrcMemSize; i++) {
+                        MMU_p[i] = rga_service.pre_scale_buf[i];
+                    }
+                }
+                else {
+                    for(i=0; i<SrcMemSize; i++) {
+                        MMU_p[i] = ((SrcStart + i) << PAGE_SHIFT);
+                    }
+                }
             }
         }
-        else
-        {
-            MMU_p = MMU_Base;
-
-            if(req->src.yrgb_addr == (uint32_t)rga_service.pre_scale_buf)
+        else {
+            if(req->src.yrgb_addr < KERNEL_SPACE_VALID)
             {
-                /* Down scale ratio over 2, Last prc    */
-                /* MMU table copy from pre scale table  */
-
-                for(i=0; i<SrcMemSize; i++)
-                {
-                    MMU_p[i] = rga_service.pre_scale_buf[i];
+                ret = rga_MapUserMemory(&pages[0], &MMU_Base[0], SrcStart, SrcMemSize);
+                if (ret < 0) {
+                    pr_err("rga map src memory failed\n");
+                    status = ret;
+                    break;
                 }
             }
             else
             {
-                for(i=0; i<SrcMemSize; i++)
+                MMU_p = MMU_Base;
+
+                if(req->src.yrgb_addr == (uint32_t)rga_service.pre_scale_buf)
                 {
-                    MMU_p[i] = (uint32_t)virt_to_phys((uint32_t *)((SrcStart + i) << PAGE_SHIFT));
+                    /* Down scale ratio over 2, Last prc    */
+                    /* MMU table copy from pre scale table  */
+
+                    for(i=0; i<SrcMemSize; i++)
+                        MMU_p[i] = rga_service.pre_scale_buf[i];
+                }
+                else {
+                    for(i=0; i<SrcMemSize; i++)
+                        MMU_p[i] = (uint32_t)virt_to_phys((uint32_t *)((SrcStart + i) << PAGE_SHIFT));
                 }
             }
         }
 
-        if (req->dst.yrgb_addr < KERNEL_SPACE_VALID)
-        {
-            #if 0
-            ktime_t start, end;
-            start = ktime_get();
-            #endif
-            ret = rga_MapUserMemory(&pages[SrcMemSize], &MMU_Base[SrcMemSize], DstStart, DstMemSize);
-            if (ret < 0) {
-                pr_err("rga map dst memory failed\n");
-                status = ret;
-                break;
-            }
-
-            #if 0
-            end = ktime_get();
-            end = ktime_sub(end, start);
-            printk("dst mmu map time = %d\n", (int)ktime_to_us(end));
-            #endif
-        }
-        else
-        {
+        if ((req->mmu_info.mmu_flag >> 31) & 1) {
             MMU_p = MMU_Base + SrcMemSize;
-
-            for(i=0; i<DstMemSize; i++)
-            {
-                MMU_p[i] = (uint32_t)virt_to_phys((uint32_t *)((DstStart + i) << PAGE_SHIFT));
+            if ((req->mmu_info.mmu_flag >> 10) & 1) {
+                ret = rga_MapUserMemory(&pages[SrcMemSize], &MMU_Base[SrcMemSize], DstStart, DstMemSize);
+                if (ret < 0) {
+                    pr_err("rga map dst memory failed\n");
+                    status = ret;
+                    break;
+                }
+            }
+            else {
+                for(i=0; i<DstMemSize; i++)
+                    MMU_p[i] = ((DstStart + i) << PAGE_SHIFT);
+            }
+        }
+        else {
+            if (req->dst.yrgb_addr < KERNEL_SPACE_VALID) {
+                ret = rga_MapUserMemory(&pages[SrcMemSize], &MMU_Base[SrcMemSize], DstStart, DstMemSize);
+                if (ret < 0) {
+                    pr_err("rga map dst memory failed\n");
+                    status = ret;
+                    break;
+                }
+            }
+            else {
+                MMU_p = MMU_Base + SrcMemSize;
+                for(i=0; i<DstMemSize; i++)
+                    MMU_p[i] = (uint32_t)virt_to_phys((uint32_t *)((DstStart + i) << PAGE_SHIFT));
             }
         }
 
@@ -725,22 +751,42 @@ static int rga_mmu_info_color_fill_mode(struct rga_reg *reg, struct rga_req *req
             break;
         }
 
-        if (req->dst.yrgb_addr < KERNEL_SPACE_VALID)
-        {
-            ret = rga_MapUserMemory(&pages[0], &MMU_Base[0], DstStart, DstMemSize);
-            if (ret < 0) {
-                pr_err("rga map dst memory failed\n");
-                status = ret;
-                break;
+        if (req->mmu_info.mmu_flag >> 31) {
+            if ((req->mmu_info.mmu_flag >> 10) & 1) {
+                ret = rga_MapUserMemory(&pages[0], &MMU_Base[0], DstStart, DstMemSize);
+                if (ret < 0) {
+                    pr_err("rga map dst memory failed\n");
+                    status = ret;
+                    break;
+                }
+            }
+            else {
+                MMU_p = MMU_Base;
+
+                for(i=0; i<DstMemSize; i++)
+                {
+                    MMU_p[i] = ((DstStart + i) << PAGE_SHIFT);
+                }
             }
         }
-        else
-        {
-            MMU_p = MMU_Base;
-
-            for(i=0; i<DstMemSize; i++)
+        else {
+            if (req->dst.yrgb_addr < KERNEL_SPACE_VALID)
             {
-                MMU_p[i] = (uint32_t)virt_to_phys((uint32_t *)((DstStart + i) << PAGE_SHIFT));
+                ret = rga_MapUserMemory(&pages[0], &MMU_Base[0], DstStart, DstMemSize);
+                if (ret < 0) {
+                    pr_err("rga map dst memory failed\n");
+                    status = ret;
+                    break;
+                }
+            }
+            else
+            {
+                MMU_p = MMU_Base;
+
+                for(i=0; i<DstMemSize; i++)
+                {
+                    MMU_p[i] = (uint32_t)virt_to_phys((uint32_t *)((DstStart + i) << PAGE_SHIFT));
+                }
             }
         }
 
@@ -1061,55 +1107,89 @@ static int rga_mmu_info_pre_scale_mode(struct rga_reg *reg, struct rga_req *req)
         }
 
         /* map src pages */
-        if (req->src.yrgb_addr < KERNEL_SPACE_VALID)
-        {
-            ret = rga_MapUserMemory(&pages[0], &MMU_Base[0], SrcStart, SrcMemSize);
-            if (ret < 0) {
-                pr_err("rga map src memory failed\n");
-                status = ret;
-                break;
+        if (req->mmu_info.mmu_flag >> 31) {
+            if ((req->mmu_info.mmu_flag >> 8) & 1) {
+                ret = rga_MapUserMemory(&pages[0], &MMU_Base[0], SrcStart, SrcMemSize);
+                if (ret < 0) {
+                    pr_err("rga map src memory failed\n");
+                    status = ret;
+                    break;
+                }
+            }
+            else {
+                MMU_p = MMU_Base;
+                for(i=0; i<SrcMemSize; i++)
+                    MMU_p[i] = ((SrcStart + i) << PAGE_SHIFT);
             }
         }
-        else
-        {
-            MMU_p = MMU_Base;
-
-            for(i=0; i<SrcMemSize; i++)
+        else {
+            if (req->src.yrgb_addr < KERNEL_SPACE_VALID)
             {
-                MMU_p[i] = (uint32_t)virt_to_phys((uint32_t *)((SrcStart + i) << PAGE_SHIFT));
-            }
-        }
-
-
-        if(req->dst.yrgb_addr >= KERNEL_SPACE_VALID)
-        {
-            /* kernel space */
-            MMU_p = MMU_Base + SrcMemSize;
-
-            if(req->dst.yrgb_addr == (uint32_t)rga_service.pre_scale_buf)
-            {
-                for(i=0; i<DstMemSize; i++)
-                {
-                    MMU_p[i] = rga_service.pre_scale_buf[i];
+                ret = rga_MapUserMemory(&pages[0], &MMU_Base[0], SrcStart, SrcMemSize);
+                if (ret < 0) {
+                    pr_err("rga map src memory failed\n");
+                    status = ret;
+                    break;
                 }
             }
             else
             {
-                for(i=0; i<DstMemSize; i++)
+                MMU_p = MMU_Base;
+                for(i=0; i<SrcMemSize; i++)
+                    MMU_p[i] = (uint32_t)virt_to_phys((uint32_t *)((SrcStart + i) << PAGE_SHIFT));
+            }
+        }
+
+        if (req->mmu_info.mmu_flag >> 31) {
+            if ((req->mmu_info.mmu_flag >> 10) & 1) {
+                /* user space */
+                ret = rga_MapUserMemory(&pages[SrcMemSize], &MMU_Base[SrcMemSize], DstStart, DstMemSize);
+                if (ret < 0)
                 {
-                    MMU_p[i] = virt_to_phys((uint32_t *)((DstStart + i) << PAGE_SHIFT));
+                    pr_err("rga map dst memory failed\n");
+                    status = ret;
+                    break;
+                }
+            }
+            else {
+                MMU_p = MMU_Base + SrcMemSize;
+                if(req->dst.yrgb_addr == (uint32_t)rga_service.pre_scale_buf) {
+                    for(i=0; i<DstMemSize; i++)
+                        MMU_p[i] = rga_service.pre_scale_buf[i];
+                }
+                else {
+                    for(i=0; i<DstMemSize; i++)
+                        MMU_p[i] = ((DstStart + i) << PAGE_SHIFT);
                 }
             }
         }
-        else
-        {
-            /* user space */
-            ret = rga_MapUserMemory(&pages[SrcMemSize], &MMU_Base[SrcMemSize], DstStart, DstMemSize);
-            if (ret < 0)
+        else {
+            if(req->dst.yrgb_addr >= KERNEL_SPACE_VALID)
             {
-                pr_err("rga map dst memory failed\n");
-                status = ret;
-                break;
+                /* kernel space */
+                MMU_p = MMU_Base + SrcMemSize;
+
+                if(req->dst.yrgb_addr == (uint32_t)rga_service.pre_scale_buf)
+                {
+                    for(i=0; i<DstMemSize; i++)
+                        MMU_p[i] = rga_service.pre_scale_buf[i];
+                }
+                else
+                {
+                    for(i=0; i<DstMemSize; i++)
+                        MMU_p[i] = virt_to_phys((uint32_t *)((DstStart + i) << PAGE_SHIFT));
+                }
+            }
+            else
+            {
+                /* user space */
+                ret = rga_MapUserMemory(&pages[SrcMemSize], &MMU_Base[SrcMemSize], DstStart, DstMemSize);
+                if (ret < 0)
+                {
+                    pr_err("rga map dst memory failed\n");
+                    status = ret;
+                    break;
+                }
             }
         }
 

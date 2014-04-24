@@ -89,6 +89,36 @@ static void __init rk30_init_tsadc(void)
 static void __init rk30_init_tsadc(void) {}
 #endif
 
+#if defined(CONFIG_ARCH_RK319X) && defined(IRQ_TSADC)
+static struct resource rk319x_tsadc_resource[] = {
+	{
+		.start	= IRQ_TSADC,
+		.end	= IRQ_TSADC,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= RK319X_TSADC_PHYS,
+		.end	= RK319X_TSADC_PHYS + RK319X_TSADC_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device rk319x_device_tsadc = {
+	.name		= "rk319x-tsadc",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(rk319x_tsadc_resource),
+	.resource	= rk319x_tsadc_resource,
+};
+
+static void __init rk319x_init_tsadc(void)
+{
+	platform_device_register(&rk319x_device_tsadc);
+}
+#else
+static void __init rk319x_init_tsadc(void) {}
+#endif
+
+
 static u64 dma_dmamask = DMA_BIT_MASK(32);
 
 static struct resource resource_dmac1[] = {
@@ -182,7 +212,7 @@ static struct rk29_pl330_platdata dmac1_pdata = {
 	},
 };
 
-#else 
+#else
 
 static struct rk29_pl330_platdata dmac1_pdata = {
 	.peri = {
@@ -548,7 +578,7 @@ static struct resource resources_i2c0[] = {
 	},
 	{
 		.start	= I2C0_START,
-        .end    = I2C0_END,    
+        .end    = I2C0_END,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -585,7 +615,7 @@ static struct resource resources_i2c1[] = {
 	},
 	{
 		.start	= I2C1_START,
-        .end    = I2C1_END,    
+        .end    = I2C1_END,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -618,7 +648,7 @@ static struct resource resources_i2c2[] = {
 	},
 	{
 		.start	= I2C2_START,
-        .end    = I2C2_END,    
+        .end    = I2C2_END,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -651,7 +681,7 @@ static struct resource resources_i2c3[] = {
 	},
 	{
 		.start	= I2C3_START,
-        .end    = I2C3_END,    
+        .end    = I2C3_END,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -684,7 +714,7 @@ static struct resource resources_i2c4[] = {
 	},
 	{
 		.start	= I2C4_START,
-        .end    = I2C4_END,    
+        .end    = I2C4_END,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -744,7 +774,7 @@ static int spi_io_init(struct spi_cs_gpio *cs_gpios, int cs_num)
 	int i;
 	if (cs_gpios) {
 		for (i = 0; i < cs_num; i++) {
-			rk30_mux_api_set(cs_gpios[i].cs_iomux_name, cs_gpios[i].cs_iomux_mode);
+			//rk30_mux_api_set(cs_gpios[i].cs_iomux_name, cs_gpios[i].cs_iomux_mode);
 		}
 	}
 	return 0;
@@ -857,7 +887,7 @@ struct platform_device rk29xx_device_spi0m = {
 #ifdef CONFIG_SPIM1_RK29
 static struct spi_cs_gpio rk29xx_spi1_cs_gpios[SPI_CHIPSELECT_NUM] = {
 #if 0
-#if defined(CONFIG_ARCH_RK3066B)			
+#if defined(CONFIG_ARCH_RK3066B)
 	{
 		.name = "spi1 cs0",
 		.cs_gpio = RK30_PIN0_PD7,
@@ -870,7 +900,7 @@ static struct spi_cs_gpio rk29xx_spi1_cs_gpios[SPI_CHIPSELECT_NUM] = {
 		.cs_iomux_name = GPIO1B6_SPDIFTX_SPI1CSN1_NAME,//if no iomux,set it NULL
 		.cs_iomux_mode = GPIO1B_SPI1CSN1,
 	}
-	
+
 #else
 	{
 		.name = "spi1 cs0",
@@ -1003,6 +1033,66 @@ static struct platform_device device_rga = {
 	.resource	= resource_rga,
 };
 #endif
+
+#ifdef CONFIG_IEP
+
+#if defined(CONFIG_ARCH_RK3026)
+#define RK_IEP_PHYS RK3026_IEP_PHYS
+#define RK_IEP_SIZE RK3026_IEP_SIZE
+#elif defined(CONFIG_ARCH_RK319X)
+#define RK_IEP_PHYS RK319X_IEP_PHYS
+#define RK_IEP_SIZE RK319X_IEP_SIZE
+#endif
+
+struct resource resource_iep[] = {
+    [0] = {
+        .start = RK_IEP_PHYS,
+        .end   = RK_IEP_PHYS + RK_IEP_SIZE - 1,
+        .flags = IORESOURCE_MEM,
+    },
+    [1] = {
+        .start = IRQ_IEP,
+        .end   = IRQ_IEP,
+        .flags = IORESOURCE_IRQ,
+    },
+};
+
+static struct platform_device device_iep = {
+    .name          = "iep",
+    .id            = -1,
+    .num_resources = ARRAY_SIZE(resource_iep),
+    .resource      = resource_iep,
+};
+#endif
+
+#ifdef CONFIG_RGA2_RK32
+
+#if defined(CONFIG_ARCH_RK319X)
+#define RK_RGA2_PHYS RK319X_RGA_PHYS
+#define RK_RGA2_SIZE RK319X_RGA_SIZE
+#endif
+
+static struct resource resource_rga2[] = {
+	[0] = {
+		.start = RK_RGA2_PHYS,
+		.end   = RK_RGA2_PHYS + RK_RGA2_SIZE - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = IRQ_RGA,
+		.end   = IRQ_RGA,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device device_rga2 = {
+	.name		= "rga",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(resource_rga2),
+	.resource	= resource_rga2,
+};
+#endif
+
 
 #ifdef IRQ_IPP
 static struct resource resource_ipp[] = {
@@ -1179,6 +1269,32 @@ static struct platform_device device_emmc = {
 };
 #endif
 
+#ifdef CONFIG_SDMMC2_RK29
+static struct resource resources_sdmmc2[] = {
+	{
+		.start 	= IRQ_EMMC,
+		.end 	= IRQ_EMMC,
+		.flags 	= IORESOURCE_IRQ,
+	},
+	{
+		.start 	= RK30_EMMC_PHYS,
+		.end 	= RK30_EMMC_PHYS + RK30_EMMC_SIZE - 1,
+		.flags 	= IORESOURCE_MEM,
+	}
+
+};
+
+static struct platform_device device_sdmmc2 = {
+	.name		= "emmc",
+	.id		= -1, //For compatibility with old code, do not set this id-value to 2
+	.num_resources	= ARRAY_SIZE(resources_sdmmc2),
+	.resource	= resources_sdmmc2,
+	.dev 		= {
+		.platform_data = &default_sdmmc2_data,
+	},
+};
+#endif
+
 #ifdef CONFIG_SDMMC0_RK29
 static struct resource resources_sdmmc0[] = {
 	{
@@ -1233,6 +1349,11 @@ static void __init rk30_init_sdmmc(void)
 {
 #ifdef CONFIG_EMMC_RK
 	platform_device_register(&device_emmc);
+#endif
+
+#ifdef CONFIG_SDMMC2_RK29
+    //register eMMC
+	platform_device_register(&device_sdmmc2);
 #endif
 #ifdef CONFIG_SDMMC0_RK29
 	platform_device_register(&device_sdmmc0);
@@ -1353,6 +1474,53 @@ struct platform_device device_arm_pmu = {
 	.resource	= resource_arm_pmu,
 };
 
+
+#if defined(CONFIG_ARCH_RK319X) && defined(CONFIG_RK616_MIPI_DSI)
+static struct resource resources_mipi_dsi[] = {
+	{
+		.start	= IRQ_MIPI_DSI_CONTROLLER,
+		.end	= IRQ_MIPI_DSI_CONTROLLER,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= RK319X_MIPI_DSI_HOST_PHYS,
+		.end	= RK319X_MIPI_DSI_HOST_PHYS + RK319X_MIPI_DSI_HOST_SIZE - 1,
+		.name   = "mipi_dsi_host",
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= RK319X_MIPI_DSI_PHY_PHYS,
+		.end	= RK319X_MIPI_DSI_PHY_PHYS + RK319X_MIPI_DSI_PHY_SIZE - 1,
+		.name   = "mipi_dsi_phy",
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device device_mipi_dsi = {
+	.name	= "rk616-mipi",
+	.id	= 1,
+	.num_resources	= ARRAY_SIZE(resources_mipi_dsi),
+	.resource	= resources_mipi_dsi,
+};
+#endif
+
+#if defined(CONFIG_ARCH_RK319X) && defined(CONFIG_RK319x_LVDS) && (!defined(CONFIG_RK616_MIPI_DSI))
+static struct resource resource_lvds[] = {
+        {
+                .start  =  RK319X_MIPI_DSI_PHY_PHYS,
+                .end    =  RK319X_MIPI_DSI_PHY_PHYS + RK319X_MIPI_DSI_PHY_SIZE - 1,
+                .flags  = IORESOURCE_MEM,
+        },
+};
+
+static struct platform_device device_lvds = {
+        .name           = "rk319x-lvds",
+        .id             = -1,
+        .num_resources  = ARRAY_SIZE(resource_lvds),
+        .resource       = resource_lvds,
+};
+#endif
+
 static int __init rk30_init_devices(void)
 {
 	rk30_init_dma();
@@ -1362,6 +1530,14 @@ static int __init rk30_init_devices(void)
 #ifdef CONFIG_RGA_RK30
 	platform_device_register(&device_rga);
 #endif
+#ifdef CONFIG_IEP
+    platform_device_register(&device_iep);
+#endif
+
+#ifdef CONFIG_RGA2_RK32
+	platform_device_register(&device_rga2);
+#endif
+
 #ifdef IRQ_IPP
 	platform_device_register(&device_ipp);
 #endif
@@ -1376,6 +1552,7 @@ static int __init rk30_init_devices(void)
 	platform_device_register(&device_keys);
 #endif
 	rk30_init_tsadc();
+	rk319x_init_tsadc();
 	rk30_init_sdmmc();
 #if defined(CONFIG_FIQ_DEBUGGER) && defined(DEBUG_UART_PHYS)
 	rk_serial_debug_init(DEBUG_UART_BASE, IRQ_DEBUG_UART, IRQ_UART_SIGNAL, -1);
@@ -1395,7 +1572,12 @@ static int __init rk30_init_devices(void)
 #ifdef CONFIG_MTD_NAND_RK29XX
 	platform_device_register(&device_nand);
 #endif
-
+#if defined(CONFIG_ARCH_RK319X) && defined(CONFIG_RK616_MIPI_DSI)
+	platform_device_register(&device_mipi_dsi);
+#endif
+#if defined(CONFIG_ARCH_RK319X) && defined(CONFIG_RK319x_LVDS) && (!(defined(CONFIG_RK616_MIPI_DSI)))
+	platform_device_register(&device_lvds);
+#endif
 	return 0;
 }
 arch_initcall(rk30_init_devices);

@@ -416,8 +416,8 @@ struct _mmc_csd {
 #define SDHC_FPP_FREQ         (49500000)  // SDHC in the highspeed. unit is hz,  max is 50Mhz.
 #endif
 #define MMC_FPP_FREQ          (19000000)  // MMC freq, unit is hz,   max is 20MHz
-#define MMCHS_26_FPP_FREQ     (24000000)  //  highspeed mode support 26M  HS-MMC, unit is hz, max is 26Mhz, 
-#define MMCHS_52_FPP_FREQ     (49500000)  //  highspeed support 52M HS-MMC,   unit is hz,   max is 52Mhz,
+#define MMCHS_26_FPP_FREQ     (24500000)  //  highspeed mode support 26M  HS-MMC, unit is hz, max is 26Mhz, 
+#define MMCHS_52_FPP_FREQ     (51500000)  //  highspeed support 52M HS-MMC,   unit is hz,   max is 52Mhz,
 
 
 #endif  /* MMC_MMC_PROTOCOL_H */

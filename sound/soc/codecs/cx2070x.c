@@ -225,6 +225,7 @@ struct cx2070x_priv
 	unsigned int mute;
     long int playback_path;
 	long int capture_path;
+    const struct firmware * fw;
 };
 
 #define get_cx2070x_priv(_codec_) ((struct cx2070x_priv *)snd_soc_codec_get_drvdata(codec))
@@ -422,11 +423,6 @@ static int NOINLINE cx2070x_real_write(struct snd_soc_codec *codec, unsigned int
     struct i2c_msg      msg[2];
     u8                  data[4];
     const struct cx2070x_reg *ri;
-    if(reg == MIC_CONTROL)
-        printk(">>>>>>>>>>>>>%s value = %0x\n", __func__, value);
-    if(reg == MIC_CONTROL)
-        dump_stack();
-
     ri=&cx2070x_regs[reg];
 
     switch(ri->type&REG_TYPE_MASK)
@@ -563,7 +559,6 @@ static int cx2070x_dsp_init(struct snd_soc_codec *codec,unsigned mode)
 {
     unsigned r;
     cx2070x_real_write(codec,DSP_INIT,mode);
-    printk("******************%s mode = %0x\n",__func__, mode);
     // maximum time for the NEWC to clear is about 2ms.
     for(r=1000;;) 
         if (!(cx2070x_real_read(codec,DSP_INIT)&DSP_INIT_NEWC))
@@ -584,8 +579,6 @@ static int NOINLINE cx2070x_write(struct snd_soc_codec *codec, unsigned int reg,
     switch(cx2070x_regs[reg].type&REG_TYPE_MASK)
     {
     case REG_TYPE_WC:
-        printk("^^^^^^^^^%0x\n",cx2070x_read_reg_cache(codec,DSP_INIT));
-        printk("^^^^^^^^^%0x\n",cx2070x_read_reg_cache(codec,DSP_INIT)|DSP_INIT_NEWC);
         return cx2070x_dsp_init(codec,cx2070x_read_reg_cache(codec,DSP_INIT)|DSP_INIT_NEWC);
     default:
         return err;
@@ -786,7 +779,7 @@ static int cx2070x_playback_path_put(struct snd_kcontrol *kcontrol,
 		break;
 	case SPK_PATH:
 	case RING_SPK:
-        printk("%s : >>>>>>>>>>>>>>>PUT SPK_PATH\n",__func__);
+        printk("%s : PUT SPK_PATH\n",__func__);
 		if (pre_path == OFF) {
 			cx2070x_real_read(codec,DSP_INIT);
             cx2070x_write(codec,DSP_INIT,cx2070x_read_reg_cache(codec,DSP_INIT)| DSP_INIT_NEWC | DSP_INIT_STREAM_3);
@@ -867,7 +860,7 @@ static int cx2070x_capture_path_put(struct snd_kcontrol *kcontrol,
         }
 		break;
 	case Main_Mic:
-    printk("%s : >>>>>>>>>>>>>>>PUT MAIN_MIC_PATH\n",__func__);
+    printk("%s : PUT MAIN_MIC_PATH\n",__func__);
         if (pre_path == MIC_OFF) {
             cx2070x_real_read(codec,DSP_INIT);
             cx2070x_write(codec,DSP_INIT,cx2070x_read_reg_cache(codec,DSP_INIT)| DSP_INIT_NEWC | DSP_INIT_STREAM_5);
@@ -1302,10 +1295,10 @@ static int cx2070x_hw_params(struct snd_pcm_substream *substream, struct snd_pcm
     /*params for port2 by showy.zhang*/
     cx2070x_real_write(codec,STREAM5_RATE,s5);
     cx2070x_real_write(codec,STREAM3_RATE,s3);// cause by incorrect parameter
-#if 0
+#if 1
     cx2070x_real_read(codec,DSP_INIT);
     dsp=cx2070x_read_reg_cache(codec,DSP_INIT);
-    printk(">>>>>>>>>>>> dsp = %0x", dsp);
+    //printk(">>>>>>>>>>>> dsp = %0x", dsp);
     if ((err=cx2070x_dsp_init(codec,dsp|DSP_INIT_NEWC))<0)
         return err;
 #endif
@@ -1423,7 +1416,7 @@ EXPORT_SYMBOL_GPL(soc_codec_cx2070x_dai);
 
 static int cx2070x_set_bias_level(struct snd_soc_codec *codec, enum snd_soc_bias_level level)
 {
-    INFO("%lu: %s(,%d) called\n",jiffies,__func__,level);
+    INFO("%lu: %s(%d) called\n",jiffies,__func__,level);
 
     switch (level)
     {
@@ -1528,7 +1521,8 @@ int I2cWriteThenRead( struct snd_soc_codec *codec, unsigned char ChipAddr, unsig
 }
 
 
-#if defined(CONFIG_SND_CX2070X_LOAD_FW)
+//#if defined(CONFIG_SND_CX2070X_LOAD_FW)
+#if 0
 static int cx2070x_apply_firmware_patch(struct snd_soc_codec *codec)
 {
 	int ret = 0;
@@ -1559,76 +1553,208 @@ static int cx2070x_apply_firmware_patch(struct snd_soc_codec *codec)
     
 	return ret;
 }
+#endif
 
-static int cx2070x_download_firmware(struct snd_soc_codec        *codec)
+int cx2070x_i2c_write(  struct i2c_client  *client, unsigned char ChipAddr, unsigned long cbBuf, unsigned char* pBuf)
 {
-    int 			ret 	   = 0;
-    char 			*buf       = NULL;
-    const struct firmware       *fw        = NULL;
-    const unsigned char         *dsp_code  = NULL;
-#if !defined(CONFIG_SND_CX2070X_USE_FW_H)
-    struct device	        *dev       = codec->dev;	
-#endif 
+    struct i2c_adapter *adap   = client->adapter;
+    struct i2c_msg      msg[1];
 
-    // load firmware to memory.
-#if defined(CONFIG_SND_CX2070X_USE_FW_H)
-    // load firmware from c head file.
-    dsp_code = ChannelFW;
-#else
-    // load firmware from file.
-    ret = request_firmware(&fw, CX2070X_FIRMWARE_FILENAME,dev); 
-    if( ret < 0)
-    {
-        printk( KERN_ERR "%s(): Firmware %s not available %d",__func__,CX2070X_FIRMWARE_FILENAME,ret);
-	goto LEAVE;
-    }
-    dsp_code = fw->data;
-#endif // #if defined(CONFIG_SND_CX2070X_USE_FW_H)
-    //
-    // Load rom data from a array.
-    //
-    buf = (char*)kzalloc(0x200,GFP_KERNEL);
-    if (buf  == NULL)
-    {
-        printk(KERN_ERR "cx2070x: out of memory .\n");
-        ret = -ENOMEM;
-        goto LEAVE;
-    }
-
-    //
-    // Setup the i2c callback function.
-    //
-    SetupI2cWriteCallback( (void *) codec, (fun_I2cWrite) I2cWrite,32);
-    SetupI2cWriteThenReadCallback( (void *) codec, (fun_I2cWriteThenRead) I2cWriteThenRead); 
-
-    // download
-    SetupMemoryBuffer(buf);
     
-    ret = DownloadFW(dsp_code);
-    if(ret)
+#if 0
+	int i;
+	char  dump[64*3];
+	char  buf[8];    
+	
+	sprintf(dump,"cx: I2C WR:"); 
+	for (i=0;i<cbBuf;i++) {
+		sprintf(buf," %02x",pBuf[i]);
+		strcat(dump,buf);
+	}
+	printk(KERN_ERR "%s",dump);
+
+
+#endif
+
+    msg[0].addr  = client->addr;
+    msg[0].flags = client->flags & I2C_M_TEN;
+    msg[0].buf   = pBuf;
+    msg[0].len   = cbBuf;
+    msg[0].scl_rate = 200 * 1000;
+
+    if (i2c_transfer(adap,msg,1)!=1)
     {
-        printk(KERN_ERR "cx2070x: download firmware failed, Error %d\n",ret);
+        printk(KERN_ERR "cx2070x: i2c_write failed.\n");
+
+        return 0;
     }
     else
     {
-        printk(KERN_INFO "cx2070x: download firmware successfully.\n");	
+        return 1;
     }
-    if (buf)
+}
+
+int cx2070x_i2c_read( struct i2c_client  *client, unsigned char ChipAddr, unsigned long cbBuf,
+    unsigned char* pBuf, unsigned long cbReadBuf, unsigned char*pReadBuf)
+{
+    
+    struct i2c_adapter *adap   = client->adapter;
+    struct i2c_msg      msg[2];
+
+    msg[0].addr  = client->addr;
+    msg[0].flags = client->flags & I2C_M_TEN;
+    msg[0].len   = cbBuf;
+    msg[0].buf   = pBuf;
+    msg[0].scl_rate = 200 * 1000;
+
+    msg[1].addr  = client->addr;
+    msg[1].flags = (client->flags & I2C_M_TEN) | I2C_M_RD;
+    msg[1].len   = cbReadBuf;
+    msg[1].buf   = pReadBuf;
+    msg[1].scl_rate = 200 * 1000;
+
+    if (i2c_transfer(adap,msg,2)!=2)
     {
-        kfree(buf);
+        printk(KERN_ERR "cx2070x: i2c_read failed.\n");
+        return 0;
     }
+    else 
+    {
+    #if 0
+	int i;
+	char  dump[64*3];
+	char  buf[8];    
+	
+	sprintf(dump,"cx: I2C WR: %02x %02x RD:", pBuf[0],pBuf[1]); 
+	for (i=0;i<cbReadBuf;i++) { 
+		sprintf(buf," %02x",pReadBuf[i]);
+		strcat(dump,buf);
+	}
+	printk(KERN_ERR "%s",dump);
+
+#endif 
+        return 1;
+    }
+}
+
+static void cx2070x_fw_loaded(const struct firmware *fw, void *context)
+{
+	struct snd_soc_codec *codec = (struct snd_soc_codec *)context;
+	struct cx2070x_priv  *cx2070x = get_cx2070x_priv(codec); 
+	char * buf = NULL;
+	const unsigned char         *dsp_code  = NULL;
+	int n;
+
+	if (fw == NULL){
+		if (cx2070x->fw ) {
+			
+			fw = cx2070x->fw;
+		} else {
+			printk(KERN_ERR "Firmware is not available!\n");
+			return;
+		}
+	} else {
+		mutex_lock(&codec->mutex);
+		cx2070x->fw = fw;
+		mutex_unlock(&codec->mutex);
+	}
+	//
+	// Load rom data from a array.
+	//
+	printk(KERN_ERR "cx2070x: downloading firmware .\n");
+	buf = (char*)kzalloc(0x200,GFP_KERNEL);
+	if (buf  == NULL) {
+		dev_err(codec->dev, "out of memory\n");
+		goto LEAVE;
+	}
+
+	SetupMemoryBuffer(buf);
+	if(DownloadFW(fw->data)) {
+		printk(KERN_ERR  "Failed to download firmware.\n");
+	} else {
+		printk(KERN_ERR "download FW successfully.\n");	
+
+		// FIX, please check if codec need a 400 delay.
+		//msleep(400);
+	}
+
+	if (buf) {
+		kfree(buf);
+	}
+#if 0
+	regcache_cache_bypass(cx2070x->regmap,true);
+#endif	
+
+#if 1
+	/* Verify that cx2070x/Balboa is ready.*/
+	/* May have to wait for ~5sec becore cx2070x/Balboa comes out of reset*/
+	for(n=5000;!bNoHW;) {
+		int abcode=cx2070x_real_read(codec,ABORT_CODE);
+		if (abcode==0x01)
+			break;  // initialization done!
+		if (--n==0) {
+			printk("Timeout waiting for cx2070x to come out of reset!\n");
+			goto LEAVE;
+		}
+		msleep(1);
+	}
+
+    // Initialize the CX2070X regisers after FW downloader.
+    for(n=0;n<noof(cx2070x_regs);n++)
+        switch(cx2070x_regs[n].type&REG_TYPE_MASK)
+    {
+        case REG_TYPE_RO:
+        case REG_TYPE_RW:
+            cx2070x_real_read(codec,n);
+            break;
+        case REG_TYPE_WI:
+        case REG_TYPE_WC:
+            cx2070x_real_write(codec,n,cx2070x_data[n]);
+            break;
+#if defined(REG_TYPE_DM)
+        case REG_TYPE_DM:
+            break;
+#endif
+        default:
+            snd_BUG();
+    }   
+    cx2070x_real_write(codec, USB_LOCAL_VOLUME, 0x42);
+    /*To be completed, use for USB5V_DET*/
+    gpio_request(RK30_PIN1_PB6, NULL);
+    gpio_direction_output(RK30_PIN1_PB6, GPIO_HIGH);
+
+	char patch_version[3];
+	/*	regmap_bulk_read(cx2070x->regmap,CX2070X_PATCH_VERSION_H,patch_version,3);
+	*/
+	//regcache_cache_bypass(cx2070x->regmap,false);
+#if 0
+	regcache_cache_only(cx2070x->regmap,false);
+#endif
+	snd_soc_dapm_sync(&codec->dapm);
+	//regcache_sync(cx2070x->regmap);
+#endif
+
 LEAVE:
 
-#if defined(CONFIG_SND_CX2070X_LOAD_FW) && !defined(CONFIG_SND_CX2070X_USE_FW_H)
-    if(fw)
-    {
-        release_firmware(fw);
-    }
-#endif 
-    return ret;
-
+	return;
 }
-#endif
+
+static void cx2070x_download_firmware(struct snd_soc_codec        *codec)
+{
+
+    struct cx2070x_priv		*cx2070x = get_cx2070x_priv(codec); 
+
+	//
+	// Setup the i2c callback function.
+	//
+	SetupI2cWriteCallback( (void *) cx2070x->control_data, (fun_I2cWrite) cx2070x_i2c_write,32);
+	SetupI2cWriteThenReadCallback( (void *) cx2070x->control_data, (fun_I2cWriteThenRead) cx2070x_i2c_read); 
+
+	// load firmware from file.
+	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+				CX2070X_FIRMWARE_FILENAME, codec->dev, GFP_KERNEL,
+				codec, cx2070x_fw_loaded);
+}
 
 unsigned int cx2070x_hw_read( struct snd_soc_codec *codec, unsigned int regaddr)
 {
@@ -1657,7 +1783,6 @@ static int NOINLINE cx2070x_init(struct snd_soc_codec* codec)
     int                   n,vl,vh,vm,fh, fl,ret = 0;
     cx2070x_reg_t	       *reg_cache;
 
-    printk(">>>>>>>%s",__func__);
     INFO("%lu: %s() called\n",jiffies,__func__);
 
     codec->control_data = cx2070x->control_data;
@@ -1682,33 +1807,84 @@ static int NOINLINE cx2070x_init(struct snd_soc_codec* codec)
     }
 #endif
 
+    /*To be completed, use for USB5V_DET*/
+    gpio_request(RK30_PIN1_PB6, NULL);
+    gpio_direction_output(RK30_PIN1_PB6, GPIO_HIGH);
+     
+    //cx2070x_add_controls(codec);
+    //cx2070x_add_widgets(codec);
+    snd_soc_add_controls(codec, cx2070x_snd_path_controls,
+				ARRAY_SIZE(cx2070x_snd_path_controls));
+
+    //snd_soc_dapm_nc_pin(&codec->dapm, "LINE IN");
+    //snd_soc_dapm_nc_pin( &codec->dapm, "LINE OUT");
+    //snd_soc_dapm_enable_pin( &codec->dapm, "INT MIC");
+    //snd_soc_dapm_enable_pin( &codec->dapm, "INT SPK");
+    //snd_soc_dapm_disable_pin( &codec->dapm, "BT IN");
+    //snd_soc_dapm_enable_pin( &codec->dapm, "Headphone");
+    //snd_soc_dapm_disable_pin( &codec->dapm, "BT OUT");
+
+
+#if defined(CONFIG_SND_CX2070X_GPIO_JACKSENSE)
+    /* Headset jack detection */
+    ret = snd_soc_jack_new(codec, "Headset Jack",
+        SND_JACK_HEADSET, &hs_jack);
+    if (ret)    
+    {
+        printk(KERN_ERR "CX2070X: failed to register Headset Jack\n");
+        goto card_err;
+    }
+
+    ret = snd_soc_jack_add_gpios(&hs_jack, ARRAY_SIZE(hs_jack_gpios),
+        hs_jack_gpios);
+    if (ret)    
+    {
+        printk(KERN_ERR "CX2070X: failed to add jack gpios.\n");
+        goto card_err;
+    }
+    
+    ret = snd_soc_jack_add_pins(&hs_jack, ARRAY_SIZE(hs_jack_pins),
+        hs_jack_pins);
+    if (ret)    
+    {
+        printk(KERN_ERR "CX2070X: failed to add soc jack pin\n");
+        goto card_err;
+    }
+#else
+     //snd_soc_dapm_sync( &codec->dapm);
+#endif //#if defined(CONFIG_SND_CX2070X_GPIO_JACKSENSE)
+
+#if defined(CONFIG_SND_CXLIFEGUARD)
+    cxdbg_dev_init(codec);
+#endif 
+
+#if 1
+// Initialize the CX2070X regisers for pop noise.
+    for(n=0;n<noof(cx2070x_regs);n++)
+        switch(cx2070x_regs[n].type&REG_TYPE_MASK)
+    {
+        case REG_TYPE_RO:
+        case REG_TYPE_RW:
+            cx2070x_real_read(codec,n);
+            break;
+        case REG_TYPE_WI:
+        case REG_TYPE_WC:
+            if(n == DSP_INIT)             
+                break;
+            cx2070x_real_write(codec,n,cx2070x_data[n]);
+            break;
+#if defined(REG_TYPE_DM)
+        case REG_TYPE_DM:
+            break;
+#endif
+        default:
+            snd_BUG();
+    }   
+#endif
 
 #if defined(CONFIG_SND_CX2070X_LOAD_FW)
-    ret = cx2070x_download_firmware(codec);
-    if( ret < 0)
-    {
-	printk(KERN_ERR "%s: failed to download firmware\n",__func__);
-	return ret;
-    }
-
+    cx2070x_download_firmware(codec);
 #endif
-    // Verify that Channel/Balboa is ready.
-    // May have to wait for ~5sec becore Channel/Balboa comes out of reset
-    for(n=5000;!bNoHW;)
-    {
-        int abcode=cx2070x_real_read(codec,ABORT_CODE);
-     //   int abcode=cx2070x_real_read(codec,CHIP_VERSION);
-        printk(">>>>>>>>>>>>>>>%s abcode = %d",__func__, abcode);
-        if (abcode==0x01)
-            break;  // initialization done!
-        if (--n==0)
-        {
-            printk(KERN_ERR "Timeout waiting for cx2070x to come out of reset!\n");
-            return -EIO;
-        }
-        msleep(1);
-    }
-
     cx2070x_real_read(codec,FIRMWARE_VERSION);
     cx2070x_real_read(codec,PATCH_VERSION);
     cx2070x_real_read(codec,CHIP_VERSION);
@@ -1751,86 +1927,12 @@ static int NOINLINE cx2070x_init(struct snd_soc_codec* codec)
 	goto card_err;
     }
     
-
     if (reg_cache[PATCH_VERSION])
     {
       	vl=(reg_cache[PATCH_VERSION]>>0)&0xFF;
       	vh=(reg_cache[PATCH_VERSION]>>8)&0xFF;
        	printk("%s(): CX2070X patch version %u.%u\n",__func__,vh,vl);
     }
-
-    // Initialize the CX2070X regisers and/or read them as needed.
-    for(n=0;n<noof(cx2070x_regs);n++)
-        switch(cx2070x_regs[n].type&REG_TYPE_MASK)
-    {
-        case REG_TYPE_RO:
-        case REG_TYPE_RW:
-            cx2070x_real_read(codec,n);
-            break;
-        case REG_TYPE_WI:
-        case REG_TYPE_WC:
-            cx2070x_real_write(codec,n,cx2070x_data[n]);
-            break;
-#if defined(REG_TYPE_DM)
-        case REG_TYPE_DM:
-            break;
-#endif
-        default:
-            snd_BUG();
-    }
-    
-#if defined(CONFIG_SND_CX2070X_LOAD_FW)
-    cx2070x_apply_firmware_patch(codec);
-#endif
-
-    //cx2070x_add_controls(codec);
-    //cx2070x_add_widgets(codec);
-    snd_soc_add_controls(codec, cx2070x_snd_path_controls,
-				ARRAY_SIZE(cx2070x_snd_path_controls));
-
-    //snd_soc_dapm_nc_pin(&codec->dapm, "LINE IN");
-    //snd_soc_dapm_nc_pin( &codec->dapm, "LINE OUT");
-    //snd_soc_dapm_enable_pin( &codec->dapm, "INT MIC");
-    //snd_soc_dapm_enable_pin( &codec->dapm, "INT SPK");
-    //snd_soc_dapm_disable_pin( &codec->dapm, "BT IN");
-    //snd_soc_dapm_enable_pin( &codec->dapm, "Headphone");
-    //snd_soc_dapm_disable_pin( &codec->dapm, "BT OUT");
-
-
-#if defined(CONFIG_SND_CX2070X_GPIO_JACKSENSE)
-    /* Headset jack detection */
-    ret = snd_soc_jack_new(codec, "Headset Jack",
-        SND_JACK_HEADSET, &hs_jack);
-    if (ret)    
-    {
-        printk(KERN_ERR "CX2070X: failed to register Headset Jack\n");
-        goto card_err;
-    }
-
-    ret = snd_soc_jack_add_gpios(&hs_jack, ARRAY_SIZE(hs_jack_gpios),
-        hs_jack_gpios);
-    if (ret)    
-    {
-        printk(KERN_ERR "CX2070X: failed to add jack gpios.\n");
-        goto card_err;
-    }
-    
-    ret = snd_soc_jack_add_pins(&hs_jack, ARRAY_SIZE(hs_jack_pins),
-        hs_jack_pins);
-    if (ret)    
-    {
-        printk(KERN_ERR "CX2070X: failed to add soc jack pin\n");
-        goto card_err;
-    }
-#else
-     snd_soc_dapm_sync( &codec->dapm);
-#endif //#if defined(CONFIG_SND_CX2070X_GPIO_JACKSENSE)
-
-#if defined(CONFIG_SND_CXLIFEGUARD)
-    cxdbg_dev_init(codec);
-#endif 
-
-    cx2070x_real_write(codec, USB_LOCAL_VOLUME, 0x42);
 
     if( ret == 0)
     {
@@ -1874,7 +1976,6 @@ static int cx2070x_dbg_show_regs(struct seq_file *s, void *unused)
     if(reg_no == 0x4321) {
         cx2070x_real_read(g_cx2070x_codec, DSP_INIT); 
         source_switch = cx2070x_read_reg_cache(g_cx2070x_codec,DSP_INIT) & DSP_ENABLE_STREAM_3_4;
-        printk(">>>>>>>>>>>>source_switch = %0x",source_switch);
         switch (source_switch) {
 			case DSP_NO_SOURCE:
 				seq_printf(s, "NO_INPUT\t");
@@ -1978,24 +2079,31 @@ static ssize_t cx2070x_dbg_reg_write(struct file *file,
 	}
 
     if(reg_no == 0x4321) {
-         printk(">>>>>>>>>>>>>>>>>>>>>>val = %d",val);
          cx2070x_real_read(g_cx2070x_codec, DSP_INIT); 
          switch (val) {
 			case NO_INPUT:
-                cx2070x_write(g_cx2070x_codec,DSP_INIT,(cx2070x_read_reg_cache(g_cx2070x_codec,DSP_INIT)|
-                    DSP_INIT_NEWC) & ~DSP_ENABLE_STREAM_3_4);
+                //cx2070x_write(g_cx2070x_codec,DSP_INIT,(cx2070x_read_reg_cache(g_cx2070x_codec,DSP_INIT)|
+                    //DSP_INIT_NEWC) & ~DSP_ENABLE_STREAM_3_4);
+                cx2070x_write(g_cx2070x_codec,MIX0_INPUT1,0x80);
+                cx2070x_write(g_cx2070x_codec,MIX0_INPUT2,0x80);
                 break;
 			case I2S_ONLY:
-                cx2070x_write(g_cx2070x_codec,DSP_INIT,(cx2070x_read_reg_cache(g_cx2070x_codec,DSP_INIT)| 
-                    DSP_INIT_NEWC | DSP_ENABLE_STREAM_3) & ~DSP_ENABLE_STREAM_4);
+                //cx2070x_write(g_cx2070x_codec,DSP_INIT,(cx2070x_read_reg_cache(g_cx2070x_codec,DSP_INIT)| 
+                    //DSP_INIT_NEWC | DSP_ENABLE_STREAM_3) & ~DSP_ENABLE_STREAM_4);
+                cx2070x_write(g_cx2070x_codec,MIX0_INPUT1,0x00);
+                cx2070x_write(g_cx2070x_codec,MIX0_INPUT2,0x80);
 				break;
 			case USB_ONLY:
-                cx2070x_write(g_cx2070x_codec,DSP_INIT,(cx2070x_read_reg_cache(g_cx2070x_codec,DSP_INIT)| 
-                    DSP_INIT_NEWC | DSP_ENABLE_STREAM_4) & ~DSP_ENABLE_STREAM_3);
+                //cx2070x_write(g_cx2070x_codec,DSP_INIT,(cx2070x_read_reg_cache(g_cx2070x_codec,DSP_INIT)| 
+                    //DSP_INIT_NEWC | DSP_ENABLE_STREAM_4) & ~DSP_ENABLE_STREAM_3);
+                cx2070x_write(g_cx2070x_codec,MIX0_INPUT1,0x80);
+                cx2070x_write(g_cx2070x_codec,MIX0_INPUT2,0x00);
 				break;
 			case I2S_USB_MIXING:
-                cx2070x_write(g_cx2070x_codec,DSP_INIT,cx2070x_read_reg_cache(g_cx2070x_codec,DSP_INIT)| 
-                    DSP_INIT_NEWC | DSP_ENABLE_STREAM_3_4);
+                //cx2070x_write(g_cx2070x_codec,DSP_INIT,cx2070x_read_reg_cache(g_cx2070x_codec,DSP_INIT)| 
+                    //DSP_INIT_NEWC | DSP_ENABLE_STREAM_3_4);
+                cx2070x_write(g_cx2070x_codec,MIX0_INPUT1,0x00);
+                cx2070x_write(g_cx2070x_codec,MIX0_INPUT2,0x00);               
 				break;
 			default:
                 return count;
@@ -2054,7 +2162,7 @@ static int cx2070x_probe(struct snd_soc_codec *codec)
 	if (IS_ERR(d))
 		return PTR_ERR(d);
 
-    debugfs_create_file("SOURCE_SWITCH", 0644, d, (void *)m,
+    debugfs_create_file("SOURCE_SWITCH", 066, d, (void *)m,
 							&cx2070x_debug_reg_fops);
 		
     regs = debugfs_create_dir("regs", d);
@@ -2166,7 +2274,6 @@ static int cx2070x_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id 
 
     ret =  snd_soc_register_codec(&i2c->dev,
         &soc_codec_dev_cx2070x, &soc_codec_cx2070x_dai, 1);
-    printk(">>>>>>>%s ret = %d ",__func__,ret);
 
     if (ret < 0)
         INFO("%s() failed ret = %d\n", __func__, ret);

@@ -307,6 +307,15 @@ config MFD_RK808
 	  if you say yes here you get support for the RK808 series of
 	  Power Management chips.
 
+config MFD_RK818
+	bool "RK818 Power Management chip"
+	depends on I2C=y 
+	select MFD_CORE
+	select RTC_RK818
+	help
+	  if you say yes here you get support for the RK818 series of
+	  Power Management chips.
+
 config MFD_RICOH619
 	bool "Ricoh RC5T619 Power Management system device"
 	depends on I2C && GPIOLIB && GENERIC_HARDIRQS
@@ -872,6 +881,14 @@ config MFD_RT_SHOW_INFO
 	help
 	  Eneable RT5025 debug message
 
+config MFD_RK1000
+	bool "Support for RockChip Multimedia RK1000"
+	depends on I2C=y && GPIOLIB
+	select MFD_CORE
+	help
+	  if you say yes here you get support for the RK1000, with func as
+	  TVOUT CODEC.
+	  
 config MFD_RK610
 	bool "RK610(Jetta) Multimedia support"
 	depends on I2C=y && GPIOLIB

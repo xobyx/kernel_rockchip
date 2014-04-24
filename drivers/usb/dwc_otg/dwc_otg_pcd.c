@@ -817,7 +817,7 @@ static int dwc_otg_pcd_ep_set_halt(struct usb_ep *_ep, int _value)
 	ep = container_of(_ep, dwc_otg_pcd_ep_t, ep);
 
 	if (!_ep || (!ep->desc && ep != &ep->pcd->ep0) ||
-			ep->desc->bmAttributes == USB_ENDPOINT_XFER_ISOC) 
+	    (ep->desc && (ep->desc->bmAttributes == USB_ENDPOINT_XFER_ISOC)))
 	{
 		DWC_WARN("%s, bad ep\n", __func__);
 		return -EINVAL;
@@ -1015,7 +1015,7 @@ static int dwc_otg_pcd_wakeup(struct usb_gadget *_gadget)
 	}
 	else 
 	{
-		dwc_otg_pcd_initiate_srp(pcd);
+		//dwc_otg_pcd_initiate_srp(pcd);
 	}
 
 	SPIN_UNLOCK_IRQRESTORE(&pcd->lock, flags);
@@ -1780,7 +1780,8 @@ static void dwc_otg_pcd_check_vbus_timer( unsigned long data )
         { 
             pldata->clock_enable( pldata, 1);		
             pldata->phy_suspend(pldata, USB_PHY_ENABLED);
-        } 
+        }
+        dwc_otg_enable_global_interrupts(otg_dev->core_if);
     }
 	else if(pldata->get_status(USB_STATUS_BVABLID))
 	{  // bvalid
@@ -1799,12 +1800,16 @@ static void dwc_otg_pcd_check_vbus_timer( unsigned long data )
                 pldata->clock_enable( pldata, 0);
             }
         } 
-        else if((_pcd->conn_en)&&(_pcd->conn_status>=0)&&(_pcd->conn_status <3))
+#ifdef CONFIG_NO_USB_CHARGER_DETECT
+        else if((_pcd->conn_en)&&(_pcd->conn_status >= 0))
+#else
+        else if((_pcd->conn_en)&&(_pcd->conn_status>=0)&&(_pcd->conn_status <2))
+#endif
         {
             DWC_PRINT("********soft reconnect******************************************\n");
     	    goto connect;
         }
-        else if(_pcd->conn_status ==3)
+        else if(_pcd->conn_status ==2)
         {
 			//*连接不上时释放锁，允许系统进入二级睡眠，yk@rk,20100331*//
             dwc_otg_msc_unlock(_pcd);
@@ -1846,6 +1851,7 @@ static void dwc_otg_pcd_check_vbus_timer( unsigned long data )
     return;
 
 connect:
+    otg_dev->core_if->pcd_cb->stop(otg_dev->core_if->pcd_cb->p);
     if(_pcd->conn_status==0)
         dwc_otg_msc_lock(_pcd);
     if( pldata->phy_status)
@@ -1853,8 +1859,8 @@ connect:
         pldata->clock_enable( pldata, 1);	
         pldata->phy_suspend(pldata, USB_PHY_ENABLED);
     }
-    schedule_delayed_work( &_pcd->reconnect , 8 ); /* delay 1 jiffies */
-    _pcd->check_vbus_timer.expires = jiffies + (HZ<<1); /* 1 s */
+    schedule_delayed_work( &_pcd->reconnect , 8 ); /* delay 8 jiffies */
+    _pcd->check_vbus_timer.expires = jiffies + (HZ<<2); /* 4 s */
     add_timer(&_pcd->check_vbus_timer); 
 	local_irq_restore(flags);
     return;

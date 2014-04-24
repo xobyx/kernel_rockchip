@@ -45,6 +45,10 @@
 #include <mach/pmu.h>
 #include <mach/cru.h>
 
+#if defined(CONFIG_ARCH_RK319X)
+#include <mach/grf.h>
+#endif
+
 #include <plat/vpu_service.h>
 #include <plat/cpu.h>
 
@@ -90,7 +94,11 @@ static struct timeval pp_start,  pp_end;
 
 #define MHZ					(1000*1000)
 
+#if defined(CONFIG_ARCH_RK319X)
+#define VCODEC_PHYS             RK319X_VCODEC_PHYS
+#else
 #define VCODEC_PHYS				(0x10104000)
+#endif
 
 #define REG_NUM_9190_DEC			(60)
 #define REG_NUM_9190_PP				(41)
@@ -408,9 +416,14 @@ static void vpu_service_power_on(void)
 	service.enabled = true;
 	printk("vpu: power on\n");
 
-	clk_enable(aclk_vepu);
+    clk_enable(aclk_vepu);
 	clk_enable(hclk_vepu);
 	clk_enable(hclk_cpu_vcodec);
+#if defined(CONFIG_ARCH_RK319X)
+    /// select aclk_vepu as vcodec clock source. 
+    #define BIT_VCODEC_SEL  (1<<7)
+    writel_relaxed(readl_relaxed(RK319X_GRF_BASE + GRF_SOC_CON1) | (BIT_VCODEC_SEL) | (BIT_VCODEC_SEL << 16), RK319X_GRF_BASE + GRF_SOC_CON1);
+#endif
 	udelay(10);
 #ifdef CONFIG_ARCH_RK29
 	pmu_set_power_domain(PD_VCODEC, true);
@@ -602,10 +615,14 @@ static void reg_copy_to_hw(vpu_reg *reg)
 		int enc_count = service.hw_info->enc_reg_num;
 		u32 *dst = (u32 *)enc_dev.hwregs;
 		if (service.bug_dec_addr) {
+#if !defined(CONFIG_ARCH_RK319X)
 			cru_set_soft_reset(SOFT_RST_CPU_VCODEC, true);
+#endif
 			cru_set_soft_reset(SOFT_RST_VCODEC_AHB, true);
 			cru_set_soft_reset(SOFT_RST_VCODEC_AHB, false);
+#if !defined(CONFIG_ARCH_RK319X)
 			cru_set_soft_reset(SOFT_RST_CPU_VCODEC, false);
+#endif
 		}
 
 		service.reg_codec = reg;
@@ -885,7 +902,7 @@ static int vpu_service_check_hw(vpu_service_info *p, unsigned long hw_addr)
 	u32 enc_id = *tmp;
 	enc_id = (enc_id >> 16) & 0xFFFF;
 	pr_info("checking hw id %x\n", enc_id);
-	p->hw_info = NULL;
+    p->hw_info = NULL;
 	for (i = 0; i < ARRAY_SIZE(vpu_hw_set); i++) {
 		if (enc_id == vpu_hw_set[i].hw_id) {
 			p->hw_info = &vpu_hw_set[i];
@@ -1076,7 +1093,12 @@ static void get_hw_info(void)
 	dec->sorensonSparkSupport = (configReg >> DWL_SORENSONSPARK_E) & 0x01U;
 	dec->refBufSupport  = (configReg >> DWL_REF_BUFF_E) & 0x01U;
 	dec->vp6Support     = (configReg >> DWL_VP6_E) & 0x01U;
+#if !defined(CONFIG_ARCH_RK319X)
+    /// invalidate max decode picture width value in rk319x vpu
 	dec->maxDecPicWidth = configReg & 0x07FFU;
+#else
+    dec->maxDecPicWidth = 3840;
+#endif
 
 	/* 2nd Config register */
 	configReg   = dec_dev.hwregs[VPU_DEC_HWCFG1];
@@ -1110,6 +1132,8 @@ static void get_hw_info(void)
 		dec->refBufSupport |= 8; /* enable HW support for offset */
 	}
 
+#if !defined(CONFIG_ARCH_RK319X)
+    /// invalidate fuse register value in rk319x vpu
 	{
 	VPUHwFuseStatus_t hwFuseSts;
 	/* Decoder fuse configuration */
@@ -1222,6 +1246,7 @@ static void get_hw_info(void)
 		if (!hwFuseSts.mvcSupportFuse)      dec->mvcSupport = MVC_NOT_SUPPORTED;
 	}
 	}
+#endif
 	configReg = enc_dev.hwregs[63];
 	enc->maxEncodedWidth = configReg & ((1 << 11) - 1);
 	enc->h264Enabled = (configReg >> 27) & 1;
@@ -1386,6 +1411,7 @@ static int __init vpu_service_init(void)
 	INIT_DELAYED_WORK(&service.power_off_work, vpu_power_off_work);
 
 	vpu_service_power_on();
+
 	ret = vpu_service_check_hw(&service, VCODEC_PHYS);
 	if (ret < 0) {
 		pr_err("error: hw info check faild\n");

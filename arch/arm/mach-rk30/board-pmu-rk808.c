@@ -122,7 +122,12 @@ static int rk808_pre_init(struct rk808 *rk808)
 	/**************************************/
 	/********set dcdc/ldo/switch off when in sleep******/
 	  val = rk808_reg_read(rk808,RK808_SLEEP_SET_OFF_REG1);
-//        val |= (0x3<<5);   
+	#if 0 // arm powr off
+        val |= (0x1<<0);  // arm powr off
+	val |= (0x3<<0);// arm & logic powr off
+	#else
+	val &=( ~(0xff<<0));  
+	#endif
         ret = rk808_reg_write(rk808,RK808_SLEEP_SET_OFF_REG1,val);
          if (ret <0) {
                 printk(KERN_ERR "Unable to write RK808_SLEEP_SET_OFF_REG1 reg\n");

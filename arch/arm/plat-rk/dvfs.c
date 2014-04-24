@@ -291,10 +291,11 @@ int dvfs_clk_enable_limit(struct clk *clk, unsigned int min_rate, unsigned max_r
 
 	if (dvfs_clk->vd && dvfs_clk->vd->vd_dvfs_target){
 		mutex_lock(&rk_dvfs_mutex);
-
+		
+		dvfs_get_rate_range(clk);
 		dvfs_clk->freq_limit_en = 1;
-		dvfs_clk->min_rate = min_rate;
-		dvfs_clk->max_rate = max_rate;
+		dvfs_clk->min_rate = min_rate > dvfs_clk->min_rate ? min_rate : dvfs_clk->min_rate;
+		dvfs_clk->max_rate = max_rate < dvfs_clk->max_rate ? max_rate : dvfs_clk->max_rate;
 		if (clk->last_set_rate == 0)
 			rate = clk_get_rate(clk);
 		else
@@ -585,11 +586,16 @@ int dvfs_set_freq_volt_table(struct clk *clk, struct cpufreq_frequency_table *ta
 
 	mutex_lock(&mutex);
 	info->dvfs_table = table;
+	mutex_unlock(&mutex);
+	
+	dvfs_table_round_clk_rate(info);
+
+	mutex_lock(&mutex);
 	dvfs_get_rate_range(clk);
 	mutex_unlock(&mutex);
-
-	dvfs_table_round_clk_rate(info);
+	
 	dvfs_table_round_volt(info);
+
 	return 0;
 }
 EXPORT_SYMBOL(dvfs_set_freq_volt_table);
@@ -684,7 +690,13 @@ int clk_enable_dvfs(struct clk *clk)
 		}
 
 		dvfs_table_round_clk_rate(dvfs_clk);
+		
+		mutex_lock(&mutex);
+		dvfs_get_rate_range(clk);
+		mutex_unlock(&mutex);
+
 		dvfs_table_round_volt(dvfs_clk);
+		
 		dvfs_clk->set_freq = dvfs_clk_get_rate_kz(clk);
 		// DVFS_DBG("%s ,%s get freq%u!\n",__func__,dvfs_clk->name,dvfs_clk->set_freq);
 

@@ -39,6 +39,7 @@ obj-$(CONFIG_RK2818_REGULATOR_LP8725) += rk2818_lp8725.o
 obj-$(CONFIG_RK2818_REGULATOR_CHARGE) += charge-regulator.o
 obj-$(CONFIG_RK29_PWM_REGULATOR) += rk29-pwm-regulator.o
 obj-$(CONFIG_RK30_PWM_REGULATOR) += rk30-pwm-regulator.o
+obj-$(CONFIG_RK30_PWM_REGULATOR_ARM_LOGIC) += rk30-pwm-regulator.o
 
 
 obj-$(CONFIG_REGULATOR_TPS65023) += tps65023-regulator.o

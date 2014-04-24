@@ -6,7 +6,7 @@
 .text
 
 //r0,array0
-ENTRY(test_cpus_l0)
+ENTRY(test_cpus_l1_0)
 
 	stmfd	sp!, { r1 - r12, lr }
 1: 	mov r0,r0
@@ -39,7 +39,7 @@ l1_test_error:
 	mov r1,r1
 	1: mov r1,r1
 	b 1b
-ENDPROC(test_cpus_l0)
+ENDPROC(test_cpus_l1_0)
 
 
 //r0 adr base,r1 end adr,r2 tst date

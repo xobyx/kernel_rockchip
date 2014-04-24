@@ -12,7 +12,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #endif
-
+#include <linux/display-sys.h>
 #if defined(RK616_MIPI_DSI)
 #include "../video/rockchip/transmitter/rk616_mipi_dsi.h"
 #endif
@@ -20,6 +20,8 @@
 #ifndef MHZ
 #define MHZ (1000*1000)
 #endif
+
+#define RK616_IIC_RATE	100000
 
 static struct mfd_cell rk616_devs[] = {
 	{
@@ -60,14 +62,14 @@ static int rk616_i2c_read_reg(struct mfd_rk616 *rk616, u16 reg,u32 *pval)
 	msgs[0].flags = client->flags;
 	msgs[0].len = 2;
 	msgs[0].buf = reg_buf;
-	msgs[0].scl_rate = rk616->pdata->scl_rate;
+	msgs[0].scl_rate = RK616_IIC_RATE;//rk616->pdata->scl_rate;
 	msgs[0].udelay = client->udelay;
 
 	msgs[1].addr = client->addr;
 	msgs[1].flags = client->flags | I2C_M_RD;
 	msgs[1].len = 4;
 	msgs[1].buf = (char *)pval;
-	msgs[1].scl_rate = rk616->pdata->scl_rate;
+	msgs[1].scl_rate = RK616_IIC_RATE;//rk616->pdata->scl_rate;
 	msgs[1].udelay = client->udelay;
 
 	ret = i2c_transfer(adap, msgs, 2);
@@ -94,7 +96,7 @@ static int rk616_i2c_write_reg(struct mfd_rk616 *rk616, u16 reg,u32 *pval)
 	msg.flags = client->flags;
 	msg.len = 6;
 	msg.buf = (char *)tx_buf;
-	msg.scl_rate = rk616->pdata->scl_rate;
+	msg.scl_rate = RK616_IIC_RATE;//rk616->pdata->scl_rate;
 	msg.udelay = client->udelay;
 
 	ret = i2c_transfer(adap, &msg, 1);
@@ -131,7 +133,7 @@ static int rk616_i2c_write_bits(struct mfd_rk616 *rk616, u16 reg,u32 mask,u32 *p
 	msg.flags = client->flags;
 	msg.len = 6;
 	msg.buf = (char *)tx_buf;
-	msg.scl_rate = rk616->pdata->scl_rate;
+	msg.scl_rate = RK616_IIC_RATE;//rk616->pdata->scl_rate;
 	msg.udelay = client->udelay;
 
 	ret = i2c_transfer(adap, &msg, 1);
@@ -161,7 +163,7 @@ static int rk616_i2c_bulk_write(struct mfd_rk616 *rk616, u16 reg,int count,u32 *
 	msg.flags = client->flags;
 	msg.len = (count<<2) + 2;
 	msg.buf = (char *)tx_buf;
-	msg.scl_rate = rk616->pdata->scl_rate;
+	msg.scl_rate = RK616_IIC_RATE;//rk616->pdata->scl_rate;
 	msg.udelay = client->udelay;
 
 	ret = i2c_transfer(adap, &msg, 1);
@@ -319,7 +321,7 @@ static  int  rk616_pll_wait_lock(struct mfd_rk616 *rk616,int id)
 		ret = rk616->read_dev(rk616,CRU_PLL0_CON1 + offset,&val);
 		if (val&PLL0_LOCK)
 		{
-			rk616_dbg(rk616->dev,"PLL%d locked\n",id);
+			//rk616_dbg(rk616->dev,"PLL%d locked\n",id);
 			break;
 		}
 		msleep(1);
@@ -370,7 +372,10 @@ int rk616_pll_set_rate(struct mfd_rk616 *rk616,int id,u32 cfg_val,u32 frac)
 	u32 postdiv1 = (con0 >> 12)&0x7;
 	u32 refdiv = con1 & 0x3f;
 	u32 postdiv2 = (con1 >> 6) & 0x7;
-	u8 mode = !frac;
+	u8 mode = 1;
+	//u8 mode = !frac;
+	
+	printk("id %d 0x%x\n", id, cfg_val);
 	
 	if(id == 0)  //PLL0
 	{
@@ -380,6 +385,7 @@ int rk616_pll_set_rate(struct mfd_rk616 *rk616,int id,u32 cfg_val,u32 frac)
 			//return 0;
 		}
 		rk616->pll0_rate = ((u64)cfg_val << 32) | frac;
+		//printk("fbdiv=0x%x,postdiv1=0x%x,refdiv=0x%x,postdiv2=0x%x\n",fbdiv,postdiv1,refdiv,postdiv2);
 		offset = 0;
 	}
 	else // PLL1
@@ -390,6 +396,7 @@ int rk616_pll_set_rate(struct mfd_rk616 *rk616,int id,u32 cfg_val,u32 frac)
 			// return 0;
 		}
 		rk616->pll1_rate = ((u64)cfg_val << 32) | frac;
+		//printk("fbdiv=0x%x,postdiv1=0x%x,refdiv=0x%x,postdiv2=0x%x\n",fbdiv,postdiv1,refdiv,postdiv2);
 		offset = 0x0c;
 	}
 
@@ -397,14 +404,18 @@ int rk616_pll_set_rate(struct mfd_rk616 *rk616,int id,u32 cfg_val,u32 frac)
 	val = PLL0_PWR_DN | (PLL0_PWR_DN << 16);
 	ret = rk616->write_dev(rk616,CRU_PLL0_CON1 + offset,&val);
 	
-
 	ret = rk616->read_dev(rk616,CRU_PLL0_CON2 + offset,&val);
 	val &= 0xff000000;
-	if(frac)
-		val |= PLL0_FRAC(frac);
-	else
-		val |= 0x800000; //default value
+	val |= 0x08000000; //default value
 	ret = rk616->write_dev(rk616,CRU_PLL0_CON2 + offset,&val);
+
+	if (frac){
+		val = frac;
+		ret = rk616->write_dev(rk616,CRU_CODEC_DIV,&val);
+		mdelay(1);
+		ret = rk616->write_dev(rk616,CRU_CODEC_DIV,&val);
+		mdelay(1);
+	}	
 
 	val = PLL0_POSTDIV1(postdiv1) | PLL0_FBDIV(fbdiv) | PLL0_POSTDIV1_MASK | 
 		PLL0_FBDIV_MASK | (PLL0_BYPASS << 16);
@@ -441,15 +452,16 @@ static int rk616_clk_common_init(struct mfd_rk616 *rk616)
 		LCD1_CLK_DIV_MASK | LCD0_CLK_DIV_MASK; //pll1 clk from lcdc1_dclk,pll0 clk from lcdc0_dclk,mux_lcdx = lcdx_clk
 	ret = rk616->write_dev(rk616,CRU_CLKSEL0_CON,&val);
 
-	val = SCLK_SEL(SCLK_SEL_PLL1) | CODEC_MCLK_SEL(CODEC_MCLK_SEL_12M) |
-		CODEC_MCLK_SEL_MASK | SCLK_SEL_MASK; //codec mclk from clkin
+	val = SCLK_SEL(SCLK_SEL_PLL0) | CODEC_MCLK_SEL(CODEC_MCLK_SEL_PLL1) |
+	CODEC_MCLK_SEL_MASK | SCLK_SEL_MASK ; //codec mclk from clkin
 	ret = rk616->write_dev(rk616,CRU_CLKSEL1_CON,&val);
 	
-	val = 0; //codec mck = clkin
+	val = 0;
 	ret = rk616->write_dev(rk616,CRU_CODEC_DIV,&val);
-
+	
 	val = (PLL0_BYPASS) | (PLL0_BYPASS << 16);  //bypass pll0 
 	ret = rk616->write_dev(rk616,CRU_PLL0_CON0,&val);
+	
 	val = PLL0_PWR_DN | (PLL0_PWR_DN << 16);
 	ret = rk616->write_dev(rk616,CRU_PLL0_CON1,&val); //power down pll0
 
@@ -478,7 +490,8 @@ static int rk616_i2c_probe(struct i2c_client *client,const struct i2c_device_id 
 	int ret;
 	struct mfd_rk616 *rk616 = NULL;
 	struct clk *iis_clk;
-
+	struct rkdisplay_platform_data *rk616_data;
+	
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) 
 	{
 		dev_err(&client->dev, "Must have I2C_FUNC_I2C.\n");
@@ -497,7 +510,7 @@ static int rk616_i2c_probe(struct i2c_client *client,const struct i2c_device_id 
 	i2c_set_clientdata(client, rk616);
 	dev_set_drvdata(rk616->dev,rk616);
 	
-#if defined(CONFIG_SND_RK29_SOC_I2S_8CH)        
+#if defined(CONFIG_SND_RK29_SOC_I2S_8CH) || defined(CONFIG_ARCH_RK3188)      
 	iis_clk = clk_get_sys("rk29_i2s.0", "i2s");
 #elif defined(CONFIG_SND_RK29_SOC_I2S_2CH)
 	iis_clk = clk_get_sys("rk29_i2s.1", "i2s");
@@ -507,7 +520,7 @@ static int rk616_i2c_probe(struct i2c_client *client,const struct i2c_device_id 
 	if (IS_ERR(iis_clk)) 
 	{
 		dev_err(&client->dev,"failed to get i2s clk\n");
-		ret = PTR_ERR(iis_clk);
+		return PTR_ERR(iis_clk);
 	}
 	else
 	{
@@ -515,19 +528,31 @@ static int rk616_i2c_probe(struct i2c_client *client,const struct i2c_device_id 
 		
 		#if defined(CONFIG_ARCH_RK29)
 		rk29_mux_api_set(GPIO2D0_I2S0CLK_MIIRXCLKIN_NAME, GPIO2H_I2S0_CLK);
-		#else
+		#elif defined(CONFIG_ARCH_RK30)
+        rk30_mux_api_set(GPIO0B0_I2S8CHCLK_NAME, GPIO0B_I2S_8CH_CLK);
+        #elif defined(CONFIG_ARCH_RK3066B)||defined(CONFIG_ARCH_RK3188)
 		iomux_set(I2S0_MCLK);
 		#endif
 		clk_enable(iis_clk);
 		//clk_set_rate(iis_clk, 11289600);
-		rk616_mclk_set_rate(iis_clk,11289600);
+		rk616_mclk_set_rate(iis_clk,12000000/*11289600*/);
 		//clk_put(iis_clk);
 	}
 
 	mutex_init(&rk616->reg_lock);
-	
-	if(rk616->pdata->power_init)
-		rk616->pdata->power_init();
+	if(rk616 && rk616->pdata && rk616->pdata->pdata) {
+		rk616_data = rk616->pdata->pdata;
+		printk("rk616_data->io_reset_pin 0x%x 0x%x\n", rk616_data->io_reset_pin, RK30_PIN3_PB2);
+		if(rk616_data->io_reset_pin != INVALID_GPIO) {
+			ret = gpio_request(rk616_data->io_reset_pin, "rk616 reset");
+		    if (ret){ 
+		        printk("rk616_control_probe request gpio fail\n");
+		    }
+		    gpio_direction_output(rk616_data->io_reset_pin, GPIO_LOW);
+		    mdelay(2);
+		    gpio_set_value(rk616_data->io_reset_pin, GPIO_HIGH);
+		}
+	}
 	
 	rk616->read_dev = rk616_i2c_read_reg;
 	rk616->write_dev = rk616_i2c_write_reg;
@@ -559,9 +584,9 @@ static int __devexit rk616_i2c_remove(struct i2c_client *client)
 
 static void rk616_core_shutdown(struct i2c_client *client)
 {
-	struct mfd_rk616 *rk616 = i2c_get_clientdata(client);
-	if(rk616->pdata->power_deinit)
-		rk616->pdata->power_deinit();
+//	struct mfd_rk616 *rk616 = i2c_get_clientdata(client);
+//	if(rk616->pdata->power_deinit)
+//		rk616->pdata->power_deinit();
 }
 
 

@@ -73,7 +73,7 @@
 #include <linux/gps.h>
 #endif
 #ifdef CONFIG_RK_REMOTECTL
-#include <mach/remotectl.h>
+#include <plat/remotectl.h>
 #endif
 
 #include "../mach-rk30/board-rk3168-ds1006h-camera.c"
@@ -170,13 +170,12 @@ static struct spi_board_info board_spi_devices[] = {
 #define LCD_DISP_ON_PIN
 
 #ifdef  LCD_DISP_ON_PIN
-#define BL_EN_PIN         RK30_PIN0_PA2
+#define BL_EN_PIN         -1
 #define BL_EN_VALUE       GPIO_HIGH
 #endif
 static int rk29_backlight_io_init(void)
 {
-	int ret = 0;
-
+	int ret = 0;	
 	iomux_set(PWM_MODE);
 #ifdef  LCD_DISP_ON_PIN
 	ret = gpio_request(BL_EN_PIN, NULL);
@@ -2180,6 +2179,7 @@ static void __init rk30_i2c_register_board_info(void)
 //end of i2c
 
 #define POWER_ON_PIN RK30_PIN0_PA0   //power_hold
+
 static void rk30_pm_power_off(void)
 {
 	printk(KERN_ERR "rk30_pm_power_off start...\n");
@@ -2187,6 +2187,7 @@ static void rk30_pm_power_off(void)
 	wm831x_set_bits(Wm831x,WM831X_GPIO_LEVEL,0x0001,0x0000);  //set sys_pwr 0
 	wm831x_device_shutdown(Wm831x);//wm8326 shutdown
 #endif
+#if 0
 #if defined(CONFIG_REGULATOR_ACT8846)
        if (pmic_is_act8846()) {
                printk("enter dcdet===========\n");
@@ -2204,6 +2205,7 @@ static void rk30_pm_power_off(void)
 		  */
        }
 #endif
+#endif
 	gpio_direction_output(POWER_ON_PIN, GPIO_LOW);
 	while (1);
 }
@@ -2213,6 +2215,9 @@ static void __init machine_rk30_board_init(void)
 	//avs_init();
 	gpio_request(POWER_ON_PIN, "poweronpin");
 	gpio_direction_output(POWER_ON_PIN, GPIO_HIGH);
+
+	gpio_request(RK30_PIN3_PD4, "poweronled");
+	gpio_direction_output(RK30_PIN3_PD4, GPIO_HIGH);
 	
 	pm_power_off = rk30_pm_power_off;
 	

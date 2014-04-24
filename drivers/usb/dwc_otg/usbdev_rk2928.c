@@ -313,18 +313,10 @@ void usb20host_phy_suspend(void* pdata, int suspend)
 }
 void usb20host_soft_reset(void)
 {
-#if 0
-    cru_set_soft_reset(SOFT_RST_USBOTG1, true);
-    //cru_set_soft_reset(SOFT_RST_USBPHY1, true);
-    cru_set_soft_reset(SOFT_RST_OTGC1, true);
-    
-    udelay(1);
-
-    cru_set_soft_reset(SOFT_RST_USBOTG1, false);
-    //cru_set_soft_reset(SOFT_RST_USBPHY1, false);
-    cru_set_soft_reset(SOFT_RST_OTGC1, false);
-    mdelay(1);
-#endif
+    *(unsigned int*)(USBGRF_UOC1_CON5) = 0x00030001;
+    udelay(300);
+    *(unsigned int*)(USBGRF_UOC1_CON5) = 0x00030002;
+    udelay(1500);
 }
 void usb20host_clock_init(void* pdata)
 {

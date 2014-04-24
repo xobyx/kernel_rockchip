@@ -725,7 +725,8 @@ void dwc_otg_core_dev_init(dwc_otg_core_if_t *_core_if)
 #else
 
 #if !(defined(CONFIG_ARCH_RK30)  || defined(CONFIG_ARCH_RK3188) || \
-      defined(CONFIG_ARCH_RK2928)|| defined(CONFIG_ARCH_RK3026) )
+      defined(CONFIG_ARCH_RK2928)|| defined(CONFIG_ARCH_RK3026) || \
+      defined(CONFIG_ARCH_RK319X))
     DWC_ERROR("Warning!!! Please Check USB Controller FIFO Configuration\n");
 #endif    
 	/* Configure data FIFO sizes, RK30 otg has 0x3cc dwords total */
@@ -2026,6 +2027,15 @@ void dwc_otg_ep_deactivate(dwc_otg_core_if_t *_core_if, dwc_ep_t *_ep)
 	depctl.b.usbactep = 0;
 	dwc_write_reg32(addr, depctl.d32);
 
+    depctl.d32 = dwc_read_reg32(addr);
+    
+    if(_ep->is_in == 1 && depctl.b.epena)
+    {
+        depctl.b.snak = 1;
+        depctl.b.epdis = 1;
+        dwc_write_reg32(addr, depctl.d32);
+        DWC_PRINT("%s clear halt of EP %d \n",__func__, _ep->num);
+    }
 	/* Disable the Interrupt for this EP */
 	dwc_modify_reg32(&_core_if->dev_if->dev_global_regs->daintmsk,
 					 daintmsk.d32, 0);

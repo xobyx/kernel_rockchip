@@ -35,6 +35,8 @@
 #include "dwc_otg_driver.h"
 #include "dwc_otg_hcd.h"
 #include "dwc_otg_regs.h"
+#include "usbdev_rk.h"
+
 int csplit_nak = 0;
 /** @file 
  * This file contains the implementation of the HCD Interrupt handlers. 
@@ -1785,6 +1787,7 @@ static void handle_hc_chhltd_intr_dma(dwc_otg_hcd_t *_hcd,
 {
 	hcint_data_t hcint;
 	hcintmsk_data_t hcintmsk;
+    struct dwc_otg_platform_data *pldata = _hcd->core_if->otg_dev->pldata;
 
 	if (_hc->halt_status == DWC_OTG_HC_XFER_URB_DEQUEUE ||
 	    _hc->halt_status == DWC_OTG_HC_XFER_AHB_ERR) {
@@ -1876,6 +1879,8 @@ static void handle_hc_chhltd_intr_dma(dwc_otg_hcd_t *_hcd,
 				  __func__, _hc->hc_num, hcint.d32,
 				  dwc_read_reg32(&_hcd->core_if->core_global_regs->gintsts));
 				clear_hc_int(_hc_regs,chhltd);
+				if(pldata->soft_reset)
+				    pldata->soft_reset();
 		}
 	}
 }

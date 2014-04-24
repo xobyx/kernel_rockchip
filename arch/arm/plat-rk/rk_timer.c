@@ -179,12 +179,17 @@ static cycle_t rk_timer_read(struct clocksource *cs)
 #define SHIFT	26
 #define MASK	(u32)~0
 
+static void rk_clocksource_suspend_pm(struct clocksource *cs);
+static void rk_clocksource_resume_pm(struct clocksource *cs);
+static bool cs_suspended=false;
 static struct clocksource rk_timer_clocksource = {
 	.name           = TIMER_NAME,
 	.rating         = 200,
 	.read           = rk_timer_read,
 	.mask           = CLOCKSOURCE_MASK(32),
 	.flags          = CLOCK_SOURCE_IS_CONTINUOUS,
+	.suspend		=rk_clocksource_suspend_pm,
+	.resume		=rk_clocksource_resume_pm,
 };
 
 static void __init rk_timer_init_clocksource(void)
@@ -216,12 +221,15 @@ unsigned long long notrace sched_clock(void)
 		return 0;
 
 	cyc = ~rk_timer_read_current_value(timer.cs_base);
+	if(cs_suspended==true)
+		return  cd.epoch_ns;
 	return cyc_to_fixed_sched_clock(&cd, cyc, MASK, MULT, SHIFT);
 }
 
 static void notrace rk_timer_update_sched_clock(void)
 {
 	u32 cyc = ~rk_timer_read_current_value(timer.cs_base);
+	if(cs_suspended==false)
 	update_sched_clock(&cd, cyc, MASK);
 }
 
@@ -229,6 +237,74 @@ static void __init rk_timer_init_sched_clock(void)
 {
 	init_fixed_sched_clock(&cd, rk_timer_update_sched_clock, 32, 24000000, MULT, SHIFT);
 }
+
+/***********************************  sleep ****************************************/
+
+
+static inline void update_sched_clock_pm_resume(struct clock_data *cd, u32 cyc, u32 mask)
+{
+	unsigned long flags;
+	u64 ns = cd->epoch_ns 
+		/*+cyc_to_ns((24*10*1*1) & mask, cd->mult, cd->shift)*/;
+	/*
+	 * Write epoch_cyc and epoch_ns in a way that the update is
+	 * detectable in cyc_to_fixed_sched_clock().
+	 */
+	raw_local_irq_save(flags);
+	cd->epoch_cyc = cyc;
+	smp_wmb();
+	cd->epoch_ns = ns;
+	smp_wmb();
+	cd->epoch_cyc_copy = cyc;
+	raw_local_irq_restore(flags);
+}
+
+
+static void notrace rk30_update_sched_clock_resume(void)
+{
+	u32 cyc = ~rk_timer_read_current_value(timer.cs_base);
+	update_sched_clock_pm_resume(&cd, cyc, MASK);
+}
+
+static void rk_clocksource_suspend_pm(struct clocksource *cs)
+{
+	void __iomem *base = timer.cs_base;
+	rk_timer_update_sched_clock();
+	cs_suspended=true;
+
+	rk_timer_disable(base);
+
+	clk_disable(timer.cs_clk);
+	clk_disable(timer.cs_pclk);
+
+	
+
+}
+static void rk_clocksource_resume_pm(struct clocksource *cs)
+{
+	//struct clocksource *cs = &rk_timer_clocksource;
+	
+	void __iomem *base = timer.cs_base;
+	clk_enable(timer.cs_pclk);
+	clk_enable(timer.cs_clk);
+
+	rk_timer_disable(base);
+	writel_relaxed(0xFFFFFFFF, base + TIMER_LOAD_COUNT0);
+	writel_relaxed(0xFFFFFFFF, base + TIMER_LOAD_COUNT1);
+	dsb();
+	rk_timer_enable(base, TIMER_MODE_FREE_RUNNING | TIMER_INT_MASK);	
+	
+	rk30_update_sched_clock_resume();
+	rk_timer_update_sched_clock();
+	cs_suspended=false;
+	//sram_printascii("rk_clocksource_resume_pm");
+	//sram_printhex(rk_timer_read_current_value(timer.cs_base));
+	//sram_printhex(rk_timer_read_current_value(timer.cs_base));
+	//printk("%s =%x\n",__FUNCTION__,rk_timer_read_current_value(timer.cs_base));
+	//printk("%s =%x\n",__FUNCTION__,rk_timer_read_current_value(timer.cs_base));
+}
+
+/*******************************sleep end***********************************/
 
 #if !defined(CONFIG_LOCAL_TIMERS) || defined(CONFIG_HAVE_ARM_TWD)
 static struct clock_event_device rk_timer_clockevent;

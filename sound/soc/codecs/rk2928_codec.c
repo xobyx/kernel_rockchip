@@ -530,7 +530,9 @@ static int rk2928_probe(struct snd_soc_codec *codec)
 			gpio_free(rk2928_data.spkctl);
 		}
 		else
-			gpio_direction_output(rk2928_data.spkctl, GPIO_LOW);
+		{
+			gpio_direction_output(rk2928_data.spkctl, GPIO_HIGH);//pdata->spkctl_level);
+		}
 	}
 //------------------------------------------------------------------
 	if (pdata->hpctl) {

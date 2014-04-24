@@ -11,34 +11,19 @@
  * This code is to download the firmware to CX2070x device. 
  *      
  *************************************************************************
- *  Modified Date:  01/24/11
- *  File Version:   1.0.0.1
+ *  Modified Date:  11/04/13
+ *  File Version:   3.8.10.19
  *************************************************************************
  */
-#if defined(_MSC_VER) 
-// microsoft windows environment.
-#define  __BYTE_ORDER       __LITTLE_ENDIAN
-#define  __LITTLE_ENDIAN    1234
-#include <stdlib.h>   // For _MAX_PATH definition
-#include <stdio.h>
-#include <string.h>
-#define msleep(_x_) 
-int printk(const char *s, ...);
-#define KERN_ERR "<3>"
-#elif defined(__KERNEL__)  
-// linux kernel environment.
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/delay.h>
-#else
-//
-// linux user mode environment.
-//
-#include <stdlib.h>   // For _MAX_PATH definition
-#include <stdio.h>
-#endif
+#include <linux/string.h>
+
 #include "cxpump.h"
+#define AUDDRV_VERSION(major0,major1, minor, build ) (((unsigned int)major0)<<24|((unsigned int)major1)<<16| ((unsigned int)minor)<<8 |(build))
 
 #if defined( __BIG_ENDIAN) && !defined(__BYTE_ORDER)
 #define __BYTE_ORDER __BIG_ENDIAN
@@ -74,12 +59,14 @@ void InitShowProgress(const int MaxPos);
 #endif //#ifndef NULL
 
 #define S_DESC          "Cnxt Channel Firmware"  /*Specify the string that will show on head of rom file*/
+#define S_ROM_PATCH_DESC_F "CNXT CHANNEL PATCH  %02x.%02x.%02x"
 #define S_ROM_FILE_NAME "cx2070x.fw"            /*Specify the file name of rom file*/
 #define CHIP_ADDR        0x14                    /*Specify the i2c chip address*/
 #define MEMORY_UPDATE_TIMEOUT  300
 #define MAX_ROM_SIZE (1024*1024)
 //#define DBG_ERROR  "ERROR  : "
-#define DBG_ERROR  KERN_ERR
+#define DBG_ERROR  KERN_ERR "cx2070x : "
+#define DBG_INFO  KERN_INFO "cx2070x : "
 #define LOG( _msg_ )  printk  _msg_ 
 //#define LOG( _msg_ )  ;
 
@@ -689,7 +676,7 @@ if( timeout == dev_ready_time_out)                   \
 
 unsigned int CxGetFirmwarePatchVersion(void)
 {
-    unsigned int FwPatchVersion = 0;
+
     int ErrNo;
 
 
@@ -701,13 +688,9 @@ unsigned int CxGetFirmwarePatchVersion(void)
         return 0;
     }
 
-    FwPatchVersion = ReadReg(0x1584);
-    FwPatchVersion <<= 8;
-    FwPatchVersion |= ReadReg(0x1585);
-    FwPatchVersion <<= 8;
-    FwPatchVersion |= ReadReg(0x1586);
 
-    return FwPatchVersion;
+    return AUDDRV_VERSION(0,ReadReg(0x1584),ReadReg(0x1585),ReadReg(0x1586));
+
 }
 
 unsigned int CxGetFirmwareVersion(void)
@@ -742,18 +725,19 @@ int DownloadFW(const unsigned char * const pRomBin)
     struct CX_CODEC_ROM_DATA *pRomDataEnd;
     unsigned char            *pData;
     unsigned char            *pDataEnd;
-    unsigned long            CurAddr = 0;
-    unsigned long            cbDataLen = 0;
+    unsigned int            CurAddr = 0;
+    unsigned int            cbDataLen = 0;
     unsigned char            Ready;
-    unsigned long            curProgress = 0;
-    unsigned long            TotalLen    = 0;
-    unsigned long            i = 0;
-    const unsigned long      dev_ready_time_out = 100;
+    unsigned int            curProgress = 0;
+    unsigned int            TotalLen    = 0;
+    unsigned int            i = 0;
+    const unsigned int      dev_ready_time_out = 100;
     int                      bIsRomVersion  = 0;           
     const char               CHAN_PATH[]="CNXT CHANNEL PATCH";    
-    unsigned long            timeout;
-    unsigned long            fwVer;
-    unsigned long            fwPatchVer;
+    unsigned int              timeout;
+    unsigned int            fwVer;
+    unsigned int            fwPatchVer;
+    unsigned int            fwPatchVerFile;
 
     do{
         if(pRom == NULL ||g_Buffer == NULL)
@@ -773,7 +757,7 @@ int DownloadFW(const unsigned char * const pRomBin)
 		
         //check if codec is ROM version
         if (0 == memcmp(CHAN_PATH,pRom->sDesc,sizeof(CHAN_PATH)-1)) {
-			printk(KERN_INFO "[CNXT] sDesc = %s", pRom->sDesc);
+			/*printk(KERN_INFO "[CNXT] sDesc = %s", pRom->sDesc);*/
 			bIsRomVersion = 1;
         }
 
@@ -784,14 +768,17 @@ int DownloadFW(const unsigned char * const pRomBin)
             // a clear reset signal before we download firmware to it.
             if( (ReadReg(0x009) & 0x04) == 0) {
                 LOG((DBG_ERROR "cx2070x: did not get a clear reset..!"));
-                ErrNo = -ERRNO_DEVICE_NOT_RESET;
+                ErrNo = -ERRNO_DEVICE_NOT_RESET;//
                 break;
             }
-		}
+	}
 
         TotalLen = FromBigEndiaULONG(pRom->LoaderLen) + FromBigEndiaULONG(pRom->CtlLen) + FromBigEndiaULONG(pRom->SpxLen);
-       // InitShowProgress(TotalLen);
+        InitShowProgress(TotalLen);
+#if 1
+	printk(KERN_ERR "cx: before download loader");
 
+#endif
         //Download the loader.
         pRomData    = (struct CX_CODEC_ROM_DATA *) ( (char*)pRom + FromBigEndiaULONG(pRom->LoaderAddr));
         pRomDataEnd = (struct CX_CODEC_ROM_DATA *) ((char*)pRomData +FromBigEndiaULONG(pRom->LoaderLen));
@@ -824,13 +811,25 @@ int DownloadFW(const unsigned char * const pRomBin)
 
         }
 
+
+#if 1
+	printk(KERN_ERR "cx: loader check up");
+    /*makesure firmware write 0x1 to 0x1000*/
+    msleep(100);
+
+#endif
         //* check if the device is ready.
         if (bIsRomVersion) {
+	
             WAIT_UNTIL_DEVICE_READY(== 0X01,"cx2070x: Timed out waiting for cx2070x to be ready after loader downloaded!\n");
         } else { 
             WAIT_UNTIL_DEVICE_READY(!= 0xFF,"cx2070x: Timed out waiting for cx2070x to be ready after loader downloaded!\n");
 		}
 
+#if 1
+	printk(KERN_ERR "cx: updating CPX ...");
+
+#endif
         //Download the CTL
         pRomData    = (struct CX_CODEC_ROM_DATA *) ( (char*)pRom + FromBigEndiaULONG(pRom->CtlAddr ));
         pRomDataEnd = (struct CX_CODEC_ROM_DATA *) ((char*)pRomData +FromBigEndiaULONG(pRom->CtlLen));
@@ -848,6 +847,10 @@ int DownloadFW(const unsigned char * const pRomBin)
             ShowProgress(curProgress,false, I2C_OK,TotalLen);
         }
 
+#if 1
+	printk(KERN_ERR "cx: updating SPX ...");
+
+#endif
         pRomData    = (struct CX_CODEC_ROM_DATA *) ( (char*)pRom + FromBigEndiaULONG(pRom->SpxAddr ));
         pRomDataEnd = (struct CX_CODEC_ROM_DATA *) ((char*)pRomData +FromBigEndiaULONG(pRom->SpxLen));
 
@@ -868,6 +871,10 @@ int DownloadFW(const unsigned char * const pRomBin)
 
         ShowProgress(TotalLen,false, I2C_OK,TotalLen);
 
+#if 1
+	printk(KERN_ERR "cx: firmware update is done, reset codecs.");
+
+#endif
         //
         // Reset
         //
@@ -881,10 +888,13 @@ int DownloadFW(const unsigned char * const pRomBin)
             WriteReg(0x400,0x40);
             msleep(400); //delay 400 ms
         }
-       
-       WAIT_UNTIL_DEVICE_READY(== 0x01,"cx2070x: Timed out waiting for cx2070x to be ready after firmware downloaded!\n");
+       WAIT_UNTIL_DEVICE_READY(== 0x01,"cx2070x: time out!\n");
 
         //check if XPS code is working or not.
+#if 1
+	printk(KERN_ERR "cx: SPX check up");
+
+#endif
 
         WriteReg(0x117d,0x01);
         for (timeout=0;timeout<dev_ready_time_out;timeout++) 
@@ -892,7 +902,7 @@ int DownloadFW(const unsigned char * const pRomBin)
             Ready = ReadReg(0x117d);                         
             if (Ready == 0x00) break;                            
             msleep(1);                                      
-        };                                                   
+        }                                                   
         if( timeout == dev_ready_time_out)                   
         {                                                    
             LOG((DBG_ERROR "cx2070x: DSP lockup! download firmware failed!")); 
@@ -903,8 +913,18 @@ int DownloadFW(const unsigned char * const pRomBin)
         fwVer = CxGetFirmwareVersion();
         if(bIsRomVersion)
         {
-            fwPatchVer = CxGetFirmwarePatchVersion();
-            printk(KERN_INFO "cx2070x: firmware download successfully! FW: %u,%u,%u, FW Patch: %u,%u,%u\n",
+		fwPatchVer = CxGetFirmwarePatchVersion();
+		fwPatchVerFile = get_patch_version_from_file(pRomBin) ;
+		/* Check if the patch is correct.*/
+		if( fwPatchVerFile != fwPatchVer )
+		{
+			LOG((DBG_ERROR "Patch version dismatch File:%06x Device:%06x\n",
+					fwPatchVerFile, fwPatchVer ));
+			ErrNo = -ERRNO_PATCH_VERSION_DISMITCH;
+			break;
+		}
+            printk(KERN_INFO "cx2070x: firmware download successfully!");
+            printk(KERN_INFO "cx2070x: FW: %x.%x.%x, Patch: %2x.%02x.%02x",
                 (unsigned char)(fwVer>>16),  
                 (unsigned char)(fwVer>>8),  
                 (unsigned char)fwVer,
@@ -914,7 +934,7 @@ int DownloadFW(const unsigned char * const pRomBin)
         }
         else
         {
-             printk(KERN_INFO "cx2070x: firmware download successfully! FW: %u,%u,%u\n",
+             printk(KERN_INFO "cx2070x: firmware download successfully! FW: %u,%u,%u",
                 (unsigned char)(fwVer>>16),  
                 (unsigned char)(fwVer>>8),  
                 (unsigned char)fwVer);
@@ -976,3 +996,15 @@ int ApplyDSPChanges(const unsigned char *const pRom)
     return ErrNo;
 }
 
+unsigned int get_patch_version_from_file(const unsigned char *const pRomData)
+
+{   
+	char sDesc[0x20]; 	
+	unsigned char ver[4];
+	struct CX_CODEC_ROM *pRom  = (struct CX_CODEC_ROM  *)pRomData;
+	/*add a null terminal to string*/
+	memcpy(sDesc,pRom->sDesc,0x20);
+	sDesc[0x1f]=0;
+	sscanf(sDesc,S_ROM_PATCH_DESC_F,&ver[0],&ver[1],&ver[2]);
+	return AUDDRV_VERSION(0,ver[0],ver[1],ver[2]);
+}

@@ -49,6 +49,7 @@
 #include <linux/mfd/rk808.h>
 #include <linux/mfd/ricoh619.h>
 #include <linux/regulator/rk29-pwm-regulator.h>
+#include <plat/ddr.h>
 #ifdef CONFIG_MFD_RT5025
 #include <linux/mfd/rt5025.h>
 #endif
@@ -89,10 +90,50 @@
 #include "../../../drivers/staging/android/timed_gpio.h"
 #endif
 
-#if defined(CONFIG_MT6620)
+#if defined(CONFIG_MT6620) && !defined(CONFIG_MTK_COMBO_MT66XX)
 #include <linux/gps.h>
 #endif
+
+#if defined(CONFIG_MTK_COMBO_MT66XX)
+#include <linux/combo_mt66xx.h>
+#endif
+
+#if defined(CONFIG_CT36X_TS)
+#include <linux/ct36x.h>
+#endif
+
 #include "board-rk3168-tb-camera.c"
+
+
+#if defined(CONFIG_CT36X_TS)
+#define TOUCH_MODEL		363
+#define TOUCH_MAX_X		1280
+#define TOUCH_MAX_y		800
+#define TOUCH_INT_PIN RK30_PIN1_PB7
+#define TOUCH_RST_PIN RK30_PIN0_PB6
+
+static int ct36x_init_platform_hw(void)
+{
+	return 0;
+}
+
+static struct ct36x_platform_data ct36x_info = {
+	.model   = TOUCH_MODEL,
+	.x_max   = TOUCH_MAX_X,
+	.y_max   = TOUCH_MAX_y,
+
+	.rst_io = {
+		.gpio = TOUCH_RST_PIN,
+		.active_low = 1,
+	},
+	.irq_io = {
+		.gpio = TOUCH_INT_PIN,
+		.active_low = 1,
+	},
+	.orientation = {1, 0, 0, 1},
+	.init_platform_hw = ct36x_init_platform_hw,
+};
+#endif
 
 #if defined(CONFIG_TOUCHSCREEN_GT8XX)
 #define TOUCH_RESET_PIN  RK30_PIN0_PB6
@@ -390,7 +431,11 @@ static struct sensor_platform_data mma8452_info = {
 	.irq_enable = 1,
 	.poll_delay_ms = 30,
         .init_platform_hw = mma8452_init_platform_hw,
-        .orientation = {-1, 0, 0, 0, -1, 0, 0, 0, 1},
+    #if defined (CONFIG_ANDROID_KITKAT)       
+    .orientation = {0, 1, 0, -1, 0, 0, 0, 0, 1},
+ 	#else
+ 	.orientation = {-1, 0, 0, 0, -1, 0, 0, 0, 1},
+ 	#endif
 };
 #endif
 #if defined (CONFIG_GS_LIS3DH)
@@ -484,8 +529,8 @@ static struct sensor_platform_data cm3217_info = {
 #define LCD_CS_VALUE       GPIO_HIGH
 
 #define LCD_EN_PIN         RK30_PIN0_PB0
-#define MIPI_LCD_RST_PIN   RK30_PIN0_PC3   //mipi lcd's reset pin, if no reset pin, set's  INVALID_GPIO
-#define LCD_EN_VALUE       GPIO_HIGH
+#define MIPI_LCD_RST_PIN   INVALID_GPIO //RK30_PIN0_PC3   //mipi lcd's reset pin, if no reset pin, set's  INVALID_GPIO
+#define LCD_EN_VALUE       GPIO_LOW
 
 static int rk_fb_io_init(struct rk29_fb_setting_info *fb_setting)
 {
@@ -811,6 +856,40 @@ static struct rk616_platform_data rk616_pdata = {
 };
 #endif
 
+#if defined(CONFIG_TOUCHSCREEN_GSLX680)
+#define TOUCH_RESET_PIN RK30_PIN0_PB6
+#define TOUCH_EN_PIN NULL
+#define TOUCH_INT_PIN RK30_PIN1_PB7
+
+int gslx680_init_platform_hw(void)
+{
+
+       if(gpio_request(TOUCH_RESET_PIN,NULL) != 0){
+                gpio_free(TOUCH_RESET_PIN);
+                printk("gslx680_init_platform_hw gpio_request error\n");
+                return -EIO;
+        }
+        if(gpio_request(TOUCH_INT_PIN,NULL) != 0){
+                gpio_free(TOUCH_INT_PIN);
+                printk("gslx680_init_platform_hw  gpio_request error\n");
+                return -EIO;
+        }
+        gpio_direction_output(TOUCH_RESET_PIN, GPIO_HIGH);
+        mdelay(10);
+        gpio_set_value(TOUCH_RESET_PIN,GPIO_LOW);
+        mdelay(10);
+        gpio_set_value(TOUCH_RESET_PIN,GPIO_HIGH);
+        msleep(300);
+        return 0;
+
+}
+
+struct ts_hw_data     gslx680_info = {
+	.reset_gpio = TOUCH_RESET_PIN,
+	.touch_en_gpio = TOUCH_INT_PIN,
+	.init_platform_hw = gslx680_init_platform_hw,
+};
+#endif
 
 #ifdef CONFIG_SND_SOC_RK610
 static int rk610_codec_io_init(void)
@@ -925,6 +1004,7 @@ static struct platform_device irda_device = {
 
 #ifdef CONFIG_ION
 #define ION_RESERVE_SIZE        (80 * SZ_1M)
+#define ION_RESERVE_SIZE_120M   (120 * SZ_1M)
 static struct ion_platform_data rk30_ion_pdata = {
 	.nr = 1,
 	.heaps = {
@@ -932,7 +1012,7 @@ static struct ion_platform_data rk30_ion_pdata = {
 			.type = ION_HEAP_TYPE_CARVEOUT,
 			.id = ION_NOR_HEAP_ID,
 			.name = "norheap",
-			.size = ION_RESERVE_SIZE,
+//			.size = ION_RESERVE_SIZE,
 		}
 	},
 };
@@ -1011,7 +1091,9 @@ struct rk29_sdmmc_platform_data default_sdmmc0_data = {
 #if !defined(CONFIG_SDMMC_RK29_OLD)
 	.set_iomux = rk29_sdmmc_set_iomux,
 #endif
-
+#ifdef USE_SDMMC_DATA4_DATA7	
+    .emmc_is_selected = NULL,
+#endif
 	.dma_name = "sd_mmc",
 #ifdef CONFIG_SDMMC0_USE_DMA
 	.use_dma = 1,
@@ -1106,7 +1188,9 @@ struct rk29_sdmmc_platform_data default_sdmmc1_data = {
 #if !defined(CONFIG_SDMMC_RK29_OLD)
 	.set_iomux = rk29_sdmmc_set_iomux,
 #endif
-
+#ifdef USE_SDMMC_DATA4_DATA7	
+	.emmc_is_selected = NULL,
+#endif
 	.dma_name = "sdio",
 #ifdef CONFIG_SDMMC1_USE_DMA
 	.use_dma = 1,
@@ -1159,6 +1243,33 @@ struct rk29_sdmmc_platform_data default_sdmmc1_data = {
 	.enable_sd_wakeup = 0,
 };
 #endif //endif--#ifdef CONFIG_SDMMC1_RK29
+
+#ifdef CONFIG_SDMMC2_RK29
+static int rk29_sdmmc2_cfg_gpio(void)
+{
+    ;
+}
+
+struct rk29_sdmmc_platform_data default_sdmmc2_data = {
+	.host_ocr_avail =
+	    (MMC_VDD_165_195|MMC_VDD_25_26 | MMC_VDD_26_27 | MMC_VDD_27_28 | MMC_VDD_28_29 |
+	     MMC_VDD_29_30 | MMC_VDD_30_31 | MMC_VDD_31_32 | MMC_VDD_32_33 | MMC_VDD_33_34),
+
+	.host_caps = (MMC_CAP_4_BIT_DATA | MMC_CAP_8_BIT_DATA| MMC_CAP_NONREMOVABLE  |
+	        MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED | MMC_CAP_UHS_SDR12 |MMC_CAP_UHS_SDR25 |MMC_CAP_UHS_SDR50),
+
+	.io_init = rk29_sdmmc2_cfg_gpio,
+	.set_iomux = rk29_sdmmc_set_iomux,
+	.emmc_is_selected = sdmmc_is_selected_emmc,
+
+	//.power_en = INVALID_GPIO,
+   // .power_en_level = GPIO_LOW,
+
+	.dma_name = "emmc",
+	.use_dma = 1,
+
+};
+#endif//endif--#ifdef CONFIG_SDMMC2_RK29
 
 /**************************************************************************************************
  * the end of setting for SDMMC devices
@@ -1502,7 +1613,7 @@ static struct platform_device *devices[] __initdata = {
 	&rk29sdk_wifi_device,
 #endif
 
-#if defined(CONFIG_MT6620)
+#if defined(CONFIG_MT6620) && !defined(CONFIG_MTK_COMBO_MT66XX)
     &mt3326_device_gps,
 #endif   
 
@@ -2387,6 +2498,14 @@ static struct i2c_board_info __initdata i2c2_info[] = {
 		.platform_data = &goodix_info,
 	},
 #endif
+#if defined (CONFIG_CT36X_TS)
+		{
+			.type		   = CT36X_NAME,
+			.addr		   = 0x01,
+			.flags		   = 0,
+			.platform_data = &ct36x_info,
+		},
+#endif
 #if defined (CONFIG_LS_CM3217)
 	{
 		.type          = "lightsensor",
@@ -2394,6 +2513,14 @@ static struct i2c_board_info __initdata i2c2_info[] = {
 		.flags         = 0,
 		.platform_data = &cm3217_info,
 	},
+#endif
+#if defined (CONFIG_TOUCHSCREEN_GSLX680)
+    {
+        .type           = "gslX680",
+        .addr           = 0x40,
+        .flags          = 0,
+        .platform_data =&gslx680_info,
+    },
 #endif
 };
 #endif
@@ -2566,7 +2693,10 @@ static void rk30_pm_power_off(void)
 
 	#if defined(CONFIG_MFD_RT5025) 
 	if(pmic_is_rt5025()){
-	rt5025_power_off();    //rt5025 shutdown
+		if (rt5025_cable_exist())
+        		arm_pm_restart(0, "charge");
+		else
+			rt5025_power_off(); //rt5025 shutdown
 	}
 	#endif
 
@@ -2608,6 +2738,7 @@ static void __init machine_rk30_board_init(void)
 #define HD_SCREEN_SIZE 1920UL*1200UL*4*3
 static void __init rk30_reserve(void)
 {
+	int size, ion_reserve_size;
 #if defined(CONFIG_ARCH_RK3188)
 	/*if lcd resolution great than or equal to 1920*1200,reserve the ump memory */
 	if(!(get_fb_size() < ALIGN(HD_SCREEN_SIZE,SZ_1M)))
@@ -2618,7 +2749,18 @@ static void __init rk30_reserve(void)
 	}
 #endif
 #ifdef CONFIG_ION
-	rk30_ion_pdata.heaps[0].base = board_mem_reserve_add("ion", ION_RESERVE_SIZE);
+	size = ddr_get_cap() >> 20;
+	if(size >= 1024) { // DDR >= 1G, set ion to 120M
+		rk30_ion_pdata.heaps[0].size = ION_RESERVE_SIZE_120M;
+		ion_reserve_size = ION_RESERVE_SIZE_120M;
+	}
+	else {
+		rk30_ion_pdata.heaps[0].size = ION_RESERVE_SIZE;
+		ion_reserve_size = ION_RESERVE_SIZE;
+	}
+	printk("ddr size = %d M, set ion_reserve_size size to %d\n", size, ion_reserve_size);
+	//rk30_ion_pdata.heaps[0].base = board_mem_reserve_add("ion", ION_RESERVE_SIZE);
+	rk30_ion_pdata.heaps[0].base = board_mem_reserve_add("ion", ion_reserve_size);
 #endif
 #ifdef CONFIG_FB_ROCKCHIP
 	resource_fb[0].start = board_mem_reserve_add("fb0 buf", get_fb_size());

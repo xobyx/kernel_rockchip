@@ -163,25 +163,7 @@ void SetupMemoryBuffer(void * pAllocedMemoryBuffer);
  */
 int DownloadFW(const unsigned char *const pRomData);
 
-/*
- * Apply the extra DSP changes from FW file.
- * 
- * PARAMETERS
- *  
- *    pRomData            [in] - A pointer fo the input buffer that contains rom data.
- *
- * RETURN
- *  
- *    If the operation completes successfully, the return value is ERRNO_NOERR.
- *    Otherwise, return ERRON_* error code. 
- * 
- * REMARKS
- *  
- *    You need to set up both I2C/SPI Write and I2C/SPI WriteThenRead callback function 
- *    by calling SetupI2cSpiWriteCallback and SetupI2cSpiWriteThenReadCallback before you call 
- *    this function.
- */
-int ApplyDSPChanges(const unsigned char *const pRom);
+unsigned int get_patch_version_from_file(const unsigned char *const pRomData);
 
 #ifdef __cplusplus
 }
@@ -202,5 +184,6 @@ int ApplyDSPChanges(const unsigned char *const pRom);
 #define ERRNO_DEVICE_NOT_RESET      110
 #define ERRNO_DEVICE_OUT_OF_CONTROL 111
 #define ERRNO_DEVICE_DSP_LOCKUP     112
+#define ERRNO_PATCH_VERSION_DISMITCH 113
 
 

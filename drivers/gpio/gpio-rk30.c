@@ -368,7 +368,7 @@ static int rk30_gpiolib_pull_updown(struct gpio_chip *chip, unsigned offset, enu
 		__raw_writel((0x3 << (16 + offset)) | (val << offset), base);
 	} else {
 		base = RK319X_GRF_BASE + GRF_GPIO1A_PULL + (bank->id - 1) * 16 + ((offset / 8) * 4);
-		offset = (7 - (offset % 8)) * 2;
+		offset = (offset % 8) * 2;
 		__raw_writel((0x3 << (16 + offset)) | (val << offset), base);
 	}
 #else

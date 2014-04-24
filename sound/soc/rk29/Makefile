@@ -1,3 +1,4 @@
+
 # ROCKCHIP Platform Support
 snd-soc-rockchip-objs := rk29_pcm.o
 ifdef CONFIG_ARCH_RK29
@@ -34,6 +35,7 @@ snd-soc-aic3262-objs := rk29_aic3262.o
 snd-soc-rk2928-objs := rk2928-card.o
 snd-soc-es8323-objs := rk29_es8323.o
 snd-soc-rk3026-objs := rk_rk3026.o
+snd-soc-rk3190-objs := rk_rk3190.o
 snd-soc-hdmi-i2s-objs := rk_hdmi_i2s.o
 snd-soc-hdmi-spdif-objs := rk_hdmi_spdif.o
 snd-soc-rt5512-objs := rk29_rt5512.o
@@ -60,8 +62,11 @@ obj-$(CONFIG_SND_RK29_SOC_RK610) += snd-soc-rk610.o
 obj-$(CONFIG_SND_RK_SOC_RK616) += snd-soc-rk616.o
 obj-$(CONFIG_SND_RK_SOC_HDMI_I2S) += snd-soc-hdmi-i2s.o
 obj-$(CONFIG_SND_RK_SOC_HDMI_SPDIF) += snd-soc-hdmi-spdif.o
+obj-$(CONFIG_SND_RK_SOC_SPDIF_CARD) += snd-soc-hdmi-spdif.o
+
 obj-$(CONFIG_SND_RK_SOC_RK2928) += snd-soc-rk2928.o
 obj-$(CONFIG_SND_RK29_SOC_ES8323) += snd-soc-es8323.o
+obj-$(CONFIG_SND_RK_SOC_RK3190) += snd-soc-rk3190.o
 obj-$(CONFIG_SND_RK_SOC_RK3026) += snd-soc-rk3026.o
 obj-$(CONFIG_SND_RK29_SOC_RT5512) += snd-soc-rt5512.o
 obj-$(CONFIG_SND_RK29_SOC_CX2070X) += snd-soc-cx2070x.o

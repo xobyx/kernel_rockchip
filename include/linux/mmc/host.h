@@ -171,6 +171,8 @@ struct mmc_async_req {
 };
 
 #define HOST_IS_EMMC(host)	(host->unused)
+#define SDMMC_SUPPORT_EMMC(host)	(host->rk_sdmmc_emmc_used)
+
 
 struct mmc_host {
 	struct device		*parent;
@@ -282,6 +284,8 @@ struct mmc_host {
 	unsigned int		max_blk_size;	/* maximum size of one mmc block */
 	unsigned int		max_blk_count;	/* maximum number of blocks in one req */
 	unsigned int		max_discard_to;	/* max. discard timeout in ms */
+    unsigned short      rk_sdmmc_emmc_used; //rk29_sdmmc driver support emmc
+    int                 host_dev_id;
 
 	/* private data */
 	spinlock_t		lock;		/* lock for claim and bus ops */
@@ -405,7 +409,17 @@ extern void mmc_request_done(struct mmc_host *, struct mmc_request *);
 static inline void mmc_signal_sdio_irq(struct mmc_host *host)
 {
 	host->ops->enable_sdio_irq(host, 0);
-	host->sdio_irq_pending = true;
+	
+	/* Fixme: Something bad happend in io-function devices's fsm(e.g wifi),
+	 * and cause kernel oops & panic in sdio-irq routepath. We cannot
+	 * point out what diff between well and wrong cases setup drivers 
+	 * working with their firmware inside themself, so bypass host register
+	 * and hardware can been sched up timing problem by just adding if condition
+	 * to workaround it reducing the nagative effect as possible.
+	 */
+	if(host && host->sdio_irq_thread)
+		host->sdio_irq_pending = true;
+
 	wake_up_process(host->sdio_irq_thread);
 }
 

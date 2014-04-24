@@ -281,7 +281,10 @@
 #define v_VASP(x) 		(((x)&0xfff)<<16)
 
 #define DSP_VS_ST_END_F1	(0x7C)
+#define v_VSYNC_END_F1(x) 		(((x)&0xfff)<<0)
+#define v_VSYNC_ST_F1(x) 		(((x)&0xfff)<<16)
 #define DSP_VACT_ST_END_F1	(0x80)
+
 #define REG_CFG_DONE		(0x90)
 #define MCU_BYPASS_WPORT	(0x100)
 #define MCU_BYPASS_RPORT	(0x200)
@@ -372,7 +375,7 @@ static inline u32 lcdc_read_bit(struct rk3188_lcdc_device *lcdc_dev,u32 offset,u
 {
        u32 _v = readl_relaxed(lcdc_dev->regs+offset); 
        _v &= msk;
-       return (_v >> msk);   
+       return (_v?1:0);   
 }
 
 static inline void  lcdc_set_bit(struct rk3188_lcdc_device *lcdc_dev,u32 offset,u32 msk) 

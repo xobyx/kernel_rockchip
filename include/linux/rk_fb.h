@@ -81,7 +81,9 @@ extern bool rk_fb_poll_wait_frame_complete(void);
 #define OUT_P666            1   //18bit screen,connect to lcdc D0~D17
 #define OUT_P565            2 
 #define OUT_S888x           4
-#define OUT_CCIR656         6
+#define OUT_CCIR656_M0		5	//CCIR 8bit,connect to lcdc D0~D7
+#define OUT_CCIR656_M1      6	//CCIR 8bit,connect to lcdc D8~D15
+#define OUT_CCIR656_M2      7	//CCIR 8bit,connect to lcdc D7~D14
 #define OUT_S888            8
 #define OUT_S888DUMY        12
 #define OUT_P16BPP4         24
@@ -210,6 +212,20 @@ typedef enum _TRSP_MODE
     TRSP_INVAL
 } TRSP_MODE;
 
+//$_rbox_$_modify_$_zhengyang modified for box display system
+enum {
+	LAYER_DISABLE = 0,
+	LAYER_ENABLE
+};
+
+enum {
+	LAYER_WIN0 = 1,
+	LAYER_WIN1 = 2,
+	LAYER_WIN2 = 4,
+	LAYER_WIN3 = 8,
+};
+//$_rbox_$_modify_$_zhengyang modified end
+
 struct layer_par {
 	char name[5];
 	int id;
@@ -230,7 +246,7 @@ struct layer_par {
 	enum data_format format;
 
 	bool support_3d;
-    	u32 scale_yrgb_x;
+	u32 scale_yrgb_x;
 	u32 scale_yrgb_y;
 	u32 scale_cbcr_x;
 	u32 scale_cbcr_y;
@@ -244,6 +260,14 @@ struct layer_par {
 	u32 reserved;
 };
 
+//$_rbox_$_modify_$_zhengyang modified for box display system	
+struct overscan {
+	unsigned char left;
+	unsigned char top;
+	unsigned char right;
+	unsigned char bottom;
+};
+//$_rbox_$_modify_$end
 
 struct rk_lcdc_device_driver{
 	char name[6];
@@ -259,12 +283,17 @@ struct rk_lcdc_device_driver{
 	rk_screen *screen1;		      //two display devices for dual display,such as rk2918,rk2928
 	rk_screen *cur_screen;		     //screen0 is primary screen ,like lcd panel,screen1 is  extend screen,like hdmi
 	u32 pixclock;
-
+//$_rbox_$_modify_$_zhengyang modified for box display system	
+	struct overscan overscan;
+	int enable;
+	int overlay;
+	int *dsp_lut; 
+//$_rbox_$_modify_$end
 	
-        char fb0_win_id;
-        char fb1_win_id;
-        char fb2_win_id;
-        struct mutex fb_win_id_mutex;
+	char fb0_win_id;
+	char fb1_win_id;
+	char fb2_win_id;
+	struct mutex fb_win_id_mutex;
 	
 	struct completion  frame_done;		  //sync for pan_display,whe we set a new frame address to lcdc register,we must make sure the frame begain to display
 	spinlock_t  cpl_lock; 			 //lock for completion  frame done
@@ -292,6 +321,7 @@ struct rk_lcdc_device_driver{
 	int (*set_dsp_lut)(struct rk_lcdc_device_driver *dev_drv,int *lut);
 	int (*read_dsp_lut)(struct rk_lcdc_device_driver *dev_drv,int *lut);
 	int (*lcdc_hdmi_process)(struct rk_lcdc_device_driver *dev_drv,int mode); //some lcdc need to some process in hdmi mode
+	int (*set_irq_to_cpu)(struct rk_lcdc_device_driver *dev_drv,int enable);
 	int (*poll_vblank)(struct rk_lcdc_device_driver *dev_drv);
 	int (*lcdc_rst)(struct rk_lcdc_device_driver *dev_drv);
 	int (*dpi_open)(struct rk_lcdc_device_driver *dev_drv,bool open);
@@ -318,7 +348,7 @@ extern int rk_fb_unregister(struct rk_lcdc_device_driver *dev_drv);
 extern int get_fb_layer_id(struct fb_fix_screeninfo *fix);
 extern struct rk_lcdc_device_driver * rk_get_lcdc_drv(char *name);
 extern rk_screen * rk_fb_get_prmry_screen(void);
-u32 rk_fb_get_prmry_screen_pixclock(void);
+extern u32 rk_fb_get_prmry_screen_pixclock(void);
 
 extern int rk_fb_dpi_open(bool open);
 extern int rk_fb_dpi_layer_sel(int layer_id);

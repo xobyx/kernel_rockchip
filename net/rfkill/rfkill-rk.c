@@ -135,6 +135,10 @@ static const char bt_name[] =
 		"ap6493"
 #elif defined(CONFIG_AP6441)
         "ap6441"
+#elif defined(CONFIG_AP6335)
+        "ap6335"
+#elif defined(CONFIG_GB86302I)
+        "gb86302i"
 #else
         "bt_default"
 #endif
@@ -339,7 +343,7 @@ static int rfkill_rk_set_power(void *data, bool blocked)
             msleep(20);
         }
 
-#if defined(CONFIG_AP6210)
+#if defined(CONFIG_AP6210) || defined(CONFIG_AP6335)
         if (gpio_is_valid(rts->io))
         {
             if (rts->iomux.name)

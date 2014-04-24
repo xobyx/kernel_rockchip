@@ -8,7 +8,7 @@
 .text
 
 //r0,array0
-ENTRY(test_cpus_l1)
+ENTRY(test_cpus_l1_1)
 	stmfd	sp!, { r1 - r12, lr }
 1: 	mov r0,r0
 	//b 1b
@@ -34,7 +34,7 @@ ENTRY(test_cpus_l1)
 l1_test_error:
 1: mov r1,r1
 	b 1b
-ENDPROC(test_cpus_l1)
+ENDPROC(test_cpus_l1_1)
 
 
 

@@ -31,8 +31,13 @@
 #define RK3066B_HOST_DRV_VBUS RK30_PIN0_PD7
 #define RK3066B_OTG_DRV_VBUS  RK30_PIN0_PD6
 #elif defined(CONFIG_SOC_RK3168) || defined(CONFIG_SOC_RK3188) || defined(CONFIG_SOC_RK3168M) || defined(CONFIG_SOC_RK3188M)
+#ifdef CONFIG_MACH_RK3188_BOX
+#define RK3066B_HOST_DRV_VBUS RK30_PIN0_PA3
+#else
 #define RK3066B_HOST_DRV_VBUS RK30_PIN0_PC0
+#endif
 #define RK3066B_OTG_DRV_VBUS  RK30_PIN3_PD5
+
 #elif defined(CONFIG_SOC_RK3028)
 #define RK3066B_HOST_DRV_VBUS RK30_PIN1_PA4
 #define RK3066B_OTG_DRV_VBUS  RK30_PIN3_PD7
@@ -128,8 +133,6 @@ void usb20otg_hw_init(void)
         //usb phy enter usb mode
         unsigned int * otg_phy_con3 = (unsigned int*)(USBGRF_UOC0_CON0);
         *otg_phy_con3 = (0x0300 << 16);
-	//Disconnect Threshold Adjustment
-	*otg_phy_con3 = (0x07<<1)|((0x07<<1)<<16);	
 #endif    
         // other haredware init
 #if defined(CONFIG_ARCH_RK3066B) || defined(CONFIG_ARCH_RK3188)
@@ -323,11 +326,6 @@ static struct resource usb20_host_resource[] = {
 void usb20host_hw_init(void)
 {
     // usb phy config init
-#ifdef CONFIG_ARCH_RK3188
-    //Disconnect Threshold Adjustment
-    unsigned int * otg_phy_con1 = (unsigned int*)(USBGRF_UOC1_CON0);
-    *otg_phy_con1 = (0x07<<1)|((0x07<<1)<<16);
-#endif    
 
     // other haredware init
 #if defined(CONFIG_ARCH_RK3066B) || defined(CONFIG_ARCH_RK3188)

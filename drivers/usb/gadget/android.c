@@ -56,6 +56,7 @@
 #include "f_rndis.c"
 #include "rndis.c"
 #include "u_ether.c"
+#include "f_uvc.c"
 
 #ifdef CONFIG_BYPASS_INPUT_TO_HIDG
 #include "f_hid_rk.c"
@@ -259,7 +260,7 @@ static void adb_android_function_enable(struct android_usb_function *f)
 
 	/* Disable the gadget until adbd is ready */
 	if (!data->opened)
-		android_disable(dev);
+		;//android_disable(dev);
 }
 
 static void adb_android_function_disable(struct android_usb_function *f)
@@ -271,7 +272,7 @@ static void adb_android_function_disable(struct android_usb_function *f)
 
 	/* Balance the disable that was called in closed_callback */
 	if (!data->opened)
-		android_enable(dev);
+		;//android_enable(dev);
 }
 
 static struct android_usb_function adb_function = {
@@ -293,7 +294,7 @@ static void adb_ready_callback(void)
 	data->opened = true;
 
 	if (data->enabled)
-		android_enable(dev);
+		;//android_enable(dev);
 
 	mutex_unlock(&dev->mutex);
 }
@@ -308,7 +309,7 @@ static void adb_closed_callback(void)
 	data->opened = false;
 
 	if (data->enabled)
-		android_disable(dev);
+		;//android_disable(dev);
 
 	mutex_unlock(&dev->mutex);
 }
@@ -649,7 +650,7 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	if (!config)
 		return -ENOMEM;
 #ifdef CONFIG_UMS_AS_CDROM  
-	config->fsg.nluns = 8;
+	config->fsg.nluns = 1;
 	config->fsg.luns[0].removable = 1;
 	config->fsg.luns[0].ro = 1;
         config->fsg.luns[0].cdrom = 1;
@@ -844,7 +845,7 @@ static struct android_usb_function audio_source_function = {
 static int hidg_function_init(struct android_usb_function *f,
 			struct usb_composite_dev *cdev)
 {
-    ghid_setup(cdev->gadget, 1);
+    ghid_setup(cdev->gadget, 2);
     return 0;
 }
 
@@ -854,18 +855,11 @@ static void hidg_function_cleanup(struct android_usb_function *f)
     return;
 }
 
-static int hidg_function_ctrlrequest(struct android_usb_function *f,
-                            struct usb_composite_dev *cdev,
-                            const struct usb_ctrlrequest *c)
-{   
-    return hidg_ctrlrequest(cdev, c);
-}
-
 static int hidg_function_bind_config(struct android_usb_function *f,
 						struct usb_configuration *c)
 {
-    if(my_hid_data.report_desc_length)
-        hidg_bind_config(c, &my_hid_data, 0);
+    if(hid_data_kbd.report_desc_length)
+        hidg_bind_config(c, &hid_data_kbd, HIDG_INDEX_KBD);
     return 0;
 }
 static int hidg_function_unbind_config(struct android_usb_function *f,
@@ -873,13 +867,6 @@ static int hidg_function_unbind_config(struct android_usb_function *f,
 {
     return 0;
 }
-static ssize_t hidg_report_descriptor_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-    return sprintf(buf, "hid report_desc_length = %d\n", my_hid_data.report_desc_length);
-}
-
-static DEVICE_ATTR(report_descriptor, S_IRUGO | S_IWUSR, hidg_report_descriptor_show, NULL);
 
 static ssize_t hidg_bypass_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -900,7 +887,7 @@ static ssize_t hidg_bypass_store(struct device *dev,
 static DEVICE_ATTR(bypass_input, S_IRUGO | S_IWUSR, hidg_bypass_show, hidg_bypass_store);
 
 static struct device_attribute *hidg_function_attributes[] = 
-                {&dev_attr_bypass_input ,&dev_attr_report_descriptor ,NULL };
+                {&dev_attr_bypass_input ,NULL };
 
 
 static struct android_usb_function hidg_function = {
@@ -909,10 +896,67 @@ static struct android_usb_function hidg_function = {
 	.cleanup	= hidg_function_cleanup,
 	.bind_config	= hidg_function_bind_config,
 	.unbind_config  = hidg_function_unbind_config,
-	.ctrlrequest    = hidg_function_ctrlrequest,
 	.attributes     = hidg_function_attributes,
 };
+
+/* =============== for mouse =============== */
+
+static int hidg_mouse_function_bind_config(struct android_usb_function *f,
+						struct usb_configuration *c)
+{
+    if(hid_data_mouse.report_desc_length)
+        hidg_bind_config(c, &hid_data_mouse, HIDG_INDEX_MOUSE);
+    return 0;
+}
+static int hidg_mouse_function_unbind_config(struct android_usb_function *f,
+						struct usb_configuration *c)
+{
+    return 0;
+}
+
+static struct android_usb_function hidg_mouse_function = {
+	.name		= "hidg_mouse",
+	.bind_config	= hidg_mouse_function_bind_config,
+	.unbind_config  = hidg_mouse_function_unbind_config,
+};
+
 #endif
+
+
+static int webcam_function_init(struct android_usb_function *f,
+			struct usb_composite_dev *cdev)
+{
+    return 0;
+}
+
+static void webcam_function_cleanup(struct android_usb_function *f)
+{
+    return;
+}
+
+static int webcam_function_bind_config(struct android_usb_function *f,
+						struct usb_configuration *c)
+{
+	return uvc_bind_config(c, uvc_control_cls, uvc_fs_streaming_cls,
+			       uvc_hs_streaming_cls);
+}
+static int webcam_function_unbind_config(struct android_usb_function *f,
+                        struct usb_configuration *c)
+{
+    return 0;
+}
+
+
+
+static struct android_usb_function webcam_function = {
+	.name		= "webcam",
+	.init		= webcam_function_init,
+	.cleanup	= webcam_function_cleanup,
+	.bind_config	= webcam_function_bind_config,
+	.unbind_config  = webcam_function_unbind_config,
+};
+
+
 static struct android_usb_function *supported_functions[] = {
 	&adb_function,
 	&acm_function,
@@ -922,8 +966,10 @@ static struct android_usb_function *supported_functions[] = {
 	&mass_storage_function,
 	&accessory_function,
 	&audio_source_function,
+	&webcam_function,
 #ifdef CONFIG_BYPASS_INPUT_TO_HIDG
 	&hidg_function,
+	&hidg_mouse_function,
 #endif
 	NULL
 };
@@ -1142,6 +1188,17 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 	return size;
 }
 
+ssize_t wakeup_store(struct device *pdev, struct device_attribute *attr,
+			    const char *buff, size_t size)
+{
+    struct android_dev *dev = _android_dev;
+
+    if(dev->cdev->suspended && dev->connected)
+        if(dev->cdev->gadget->ops->wakeup)
+            dev->cdev->gadget->ops->wakeup(dev->cdev->gadget);
+	return size;
+}
+
 static ssize_t state_show(struct device *pdev, struct device_attribute *attr,
 			   char *buf)
 {
@@ -1213,6 +1270,8 @@ DESCRIPTOR_STRING_ATTR(iSerial, serial_string)
 static DEVICE_ATTR(functions, S_IRUGO | S_IWUSR, functions_show, functions_store);
 static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, enable_show, enable_store);
 static DEVICE_ATTR(state, S_IRUGO, state_show, NULL);
+static DEVICE_ATTR(wakeup, S_IRUGO | S_IWUSR, NULL, wakeup_store);
+
 
 static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_idVendor,
@@ -1227,6 +1286,7 @@ static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_functions,
 	&dev_attr_enable,
 	&dev_attr_state,
+	&dev_attr_wakeup,
 	NULL
 };
 

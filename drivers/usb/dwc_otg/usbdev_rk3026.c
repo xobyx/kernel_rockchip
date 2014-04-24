@@ -26,6 +26,10 @@
 #ifdef CONFIG_ARCH_RK3026
 #include "usbdev_rk3026_grf_regs.h"
 
+#if defined(CONFIG_MACH_RK3028A_BOX)
+#define RK3028A_HOST_DRV_VBUS RK30_PIN1_PA7
+#endif
+
 int dwc_otg_check_dpdm(void)
 {
 	static uint8_t * reg_base = 0;
@@ -131,7 +135,6 @@ void usb20otg_phy_suspend(void* pdata, int suspend)
 }
 void usb20otg_soft_reset(void)
 {
-#if 1 //@lyz todo for 3028 phy
     printk("~~~~~~~~~~usb20otg_soft_reset\n");
     //phy reset
     *(unsigned int*)(USBGRF_UOC0_CON0) = 0x00030001;
@@ -167,7 +170,6 @@ void usb20otg_soft_reset(void)
     cru_set_soft_reset(SOFT_RST_OTGC1,false);
     cru_set_soft_reset(SOFT_RST_USBOTG0,false);
     cru_set_soft_reset(SOFT_RST_USBOTG1,false);
-#endif
 }
 void usb20otg_clock_init(void* pdata)
 {
@@ -296,6 +298,11 @@ void usb20host_hw_init(void)
     // other haredware init
 #ifdef CONFIG_RK_CONFIG
     host_drv_init(1);
+#else
+#ifdef RK3028A_HOST_DRV_VBUS
+	gpio_request(RK3028A_HOST_DRV_VBUS, NULL);
+	gpio_direction_output(RK3028A_HOST_DRV_VBUS, GPIO_HIGH);
+#endif
 #endif
 }
 void usb20host_phy_suspend(void* pdata, int suspend)
@@ -316,18 +323,10 @@ void usb20host_phy_suspend(void* pdata, int suspend)
 }
 void usb20host_soft_reset(void)
 {
-#if 0
-    cru_set_soft_reset(SOFT_RST_USBOTG1, true);
-    //cru_set_soft_reset(SOFT_RST_USBPHY1, true);
-    cru_set_soft_reset(SOFT_RST_OTGC1, true);
-    
-    udelay(1);
-
-    cru_set_soft_reset(SOFT_RST_USBOTG1, false);
-    //cru_set_soft_reset(SOFT_RST_USBPHY1, false);
-    cru_set_soft_reset(SOFT_RST_OTGC1, false);
-    mdelay(1);
-#endif
+    *(unsigned int*)(USBGRF_UOC1_CON1) = 0x00030001;
+    udelay(300);
+    *(unsigned int*)(USBGRF_UOC1_CON1) = 0x00030002;
+    udelay(1500);
 }
 void usb20host_clock_init(void* pdata)
 {
@@ -382,6 +381,17 @@ void usb20host_power_enable(int enable)
                 host_drv_on();
         else
                 host_drv_off();
+#else
+#ifdef RK3028A_HOST_DRV_VBUS
+	if(0 == enable)
+	{
+		gpio_set_value(RK3028A_HOST_DRV_VBUS,GPIO_LOW);
+	}
+	if(1 == enable)
+	{
+		gpio_set_value(RK3028A_HOST_DRV_VBUS,GPIO_HIGH);
+	}
+#endif
 #endif
 }
 struct dwc_otg_platform_data usb20host_pdata = {

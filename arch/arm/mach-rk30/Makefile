@@ -34,6 +34,7 @@ obj-$(CONFIG_RK30_I2C_INSRAM) += i2c_sram.o
 obj-$(CONFIG_ARCH_RK30XX) += board.o
 board-$(CONFIG_MACH_RK3066_SDK) += board-rk30-sdk.o
 board-$(CONFIG_MACH_RK30_SDK) += board-rk30-sdk.o
+board-$(CONFIG_MACH_RK30_PS2_VEHICLE) += board-rk30-ps2-vehicle.o
 board-$(CONFIG_MACH_RK30_DS975) += board-rk30-ds975.o
 board-$(CONFIG_MACH_RK30_Z600T) += board-rk30-phonepad-z600t.o 
 board-$(CONFIG_MACH_RK30_PHONE) += board-rk30-phone.o board-rk30-phone-key.o
@@ -41,6 +42,9 @@ board-$(CONFIG_MACH_RK30_PHONE_PAD) += board-rk30-phonepad.o board-rk30-phonepad
 board-$(CONFIG_MACH_RK30_PHONE_LOQUAT) += board-rk30-phone-loquat.o board-rk30-phone-loquat-key.o
 board-$(CONFIG_MACH_RK30_DS1001B) += board-rk30-ds1001b.o board-rk30-ds1001b-key.o board-rk30-ds1001b-rfkill.o
 board-$(CONFIG_MACH_RK30_PHONE_A22) += board-rk30-phone-a22.o board-rk30-phone-a22-key.o
+#$_rbox_$_modify_$_begin
+board-$(CONFIG_MACH_RK30_BOX) += board-rk30-box.o
+#$_rbox_$_modify_$_end
 
 obj-$(CONFIG_SOC_RK3028) += board.o
 board-$(CONFIG_MACH_RK3028_TB) += board-rk3028-tb.o

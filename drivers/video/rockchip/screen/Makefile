@@ -67,7 +67,13 @@ obj-$(CONFIG_LCD_MQ0801D)    += lcd_mq0801d.o
 obj-$(CONFIG_LCD_LD089WU1_MIPI)   += lcd_LD089WU1_mipi.o
 obj-$(CONFIG_LCD_B080XAN02_MIPI)   += lcd_B080XAN02_mipi.o
 obj-$(CONFIG_LCD_ANDROIDCOMPUTER)   += lcd_androidcomputer.o
-
+obj-$(CONFIG_LCD_EE070NA)   += lcd_EE070NA.o
+obj-$(CONFIG_LCD_KD101N4_RK616_1280X800)  += lcd_rk61x_1280x800.o
+#$_rbox_$_modify_$_zhengyang added for box default framebuffer size
+obj-$(CONFIG_BOX_FB_480P) += lcd_480p.o
+obj-$(CONFIG_BOX_FB_720P) += lcd_720p.o
+obj-$(CONFIG_BOX_FB_1080P) += lcd_1080p.o
+#$_rbox_$_modify_$_end
 
 quiet_cmd_gen = GEN     $@
       cmd_gen = cmp -s $< $@ || cp $< $@

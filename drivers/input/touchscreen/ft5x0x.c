@@ -33,7 +33,6 @@
 #define MAX_POINT  10
 
 #define SCREEN_MAX_X 1920
-#define SCREEN_MAX_Y 1200
 
 //#define TP_UPGRADE 1
 
@@ -802,12 +801,12 @@ static void ft5x0x_power_en(struct ft5x0x_data *tsdata, int on)
 
 static void ft5x0x_chip_reset(struct ft5x0x_data *tsdata)
 {
-    gpio_direction_output(tsdata->reset_gpio, 0);
-    gpio_set_value(tsdata->reset_gpio, 1);
-	mdelay(20);
-    gpio_set_value(tsdata->reset_gpio, 0);
-	mdelay(20);
-    gpio_set_value(tsdata->reset_gpio, 1);
+	gpio_direction_output(tsdata->reset_gpio, 0);
+	gpio_set_value(tsdata->reset_gpio, 1);
+	mdelay(2);
+	gpio_set_value(tsdata->reset_gpio, 0);
+	mdelay(5);
+	gpio_set_value(tsdata->reset_gpio, 1);
 }
 
 
@@ -858,12 +857,12 @@ static int ft5x0x_chip_init(struct i2c_client * client)
 #endif
 
 	ft5x0x_power_en(tsdata, 0);
-	mdelay(100);
+	//mdelay(100);
 	ft5x0x_chip_reset(tsdata);
 	ft5x0x_power_en(tsdata, 1);
-	mdelay(500);
+	//mdelay(500);
         ft_cmd_write(0x07,0x00,0x00,0x00,1);
-	mdelay(10);
+	mdelay(5);
 
 #if 1
 	while (1) {
@@ -880,7 +879,7 @@ static int ft5x0x_chip_init(struct i2c_client * client)
 			printk(KERN_ERR "ft5x0x i2c rxdata failed\n");
 			//goto out;
 		}
-		printk("r_value = %d\n, i = %d, flag = %d", r_value, i, flag);
+		//printk("r_value = %d\n, i = %d, flag = %d", r_value, i, flag);
 		i++;
 
 		if (w_value != r_value) {
@@ -1173,7 +1172,7 @@ static int  ft5x0x_probe(struct i2c_client *client, const struct i2c_device_id *
 	unsigned char reg_value;
 #endif
 
-	printk("%s enter\n",__FUNCTION__);
+	
 	ft5x0x_ts = kzalloc(sizeof(struct ft5x0x_data), GFP_KERNEL);
 	if (!ft5x0x_ts) {
 		DBG("[ft5x0x]:alloc data failed.\n");
@@ -1181,7 +1180,7 @@ static int  ft5x0x_probe(struct i2c_client *client, const struct i2c_device_id *
 		goto exit_alloc_data_failed;
 	}
     
-    memset(ts_point, 0x0, sizeof(struct ts_event) * MAX_POINT);
+    	memset(ts_point, 0x0, sizeof(struct ts_event) * MAX_POINT);
 
 	g_client = client;
 	ft5x0x_ts->client = client;
@@ -1237,15 +1236,15 @@ static int  ft5x0x_probe(struct i2c_client *client, const struct i2c_device_id *
 	__set_bit(INPUT_PROP_DIRECT, ft5x0x_ts->input_dev->propbit);
 
 	input_mt_init_slots(ft5x0x_ts->input_dev, MAX_POINT);
-	input_set_abs_params(ft5x0x_ts->input_dev, ABS_MT_POSITION_X, 0, SCREEN_MAX_X, 0, 0);
-	input_set_abs_params(ft5x0x_ts->input_dev, ABS_MT_POSITION_Y, 0, SCREEN_MAX_Y, 0, 0);
+	input_set_abs_params(ft5x0x_ts->input_dev, ABS_MT_POSITION_X, 0, pdata->max_x, 0, 0);
+	input_set_abs_params(ft5x0x_ts->input_dev, ABS_MT_POSITION_Y, 0, pdata->max_y, 0, 0);
 	input_set_abs_params(ft5x0x_ts->input_dev, ABS_MT_TOUCH_MAJOR, 0, PRESS_MAX, 0, 0);
 
 	/***wait CTP to bootup normally***/
-	msleep(200); 
+	//msleep(20); 
         reg_version = FT5X0X_REG_FIRMID;	
 	ft5x0x_rx_data(client, &reg_version,1);
-	printk("------------------cdy == [TSP] firmware tpversion = 0x%2x-------------------------\n", reg_version);
+	printk("%s firmware version:0x%2x max_x:%d max_y:%d\n",__func__,reg_version,pdata->max_x,pdata->max_y);
 	
 	
 #ifdef TP_UPGRADE	//write firmware 
@@ -1310,7 +1309,6 @@ static void __init ft5x0x_init_async(void *unused, async_cookie_t cookie)
 
 static int __init ft5x0x_mod_init(void)
 {
-	printk("ft5x0x module init\n");
 	async_schedule(ft5x0x_init_async, NULL);
 	return 0;
 }

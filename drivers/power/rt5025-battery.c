@@ -41,22 +41,43 @@ static int rt5025_battery_parameter_backup(struct rt5025_battery_info *);
 
 void rt5025_gauge_set_status(struct rt5025_battery_info *bi, int status)
 {
-  bi->status = status;
   if (status == POWER_SUPPLY_STATUS_FULL)
   {
-	bi->tp_flag = true;
-	bi->last_tp_flag = true;
+		pr_info("%s: Battery is full \n", __func__);
+		
+		///c. Only EOC occurs and full discharge to update FCC; 2013/12/17
+		//bi->last_tp_flag = true;
+		bi->tp_flag = true;		
+		if (bi->init_once)
+	  {	return;}
   }
   else
-	power_supply_changed(&bi->battery);
+  {
+		///a. When SOC = 100, report battery status is full; 2013/12/17		
+		/*
+		if (status == POWER_SUPPLY_STATUS_CHARGING)
+		{	bi->last_tp = false;}
+  	*/
+	mutex_lock(&bi->status_change_lock);
+  	bi->status = status;
+	mutex_unlock(&bi->status_change_lock);
+	if (bi->init_once)
+	  {	return;}
+	power_supply_changed(&bi->battery);	
+  }
   wake_lock_timeout(&bi->status_wake_lock, 1.5*HZ);
-  schedule_delayed_work(&bi->monitor_work, 0);
+  schedule_delayed_work(&bi->monitor_work, msecs_to_jiffies(100));
 }
 EXPORT_SYMBOL(rt5025_gauge_set_status);
 
 void rt5025_gauge_set_online(struct rt5025_battery_info *bi, bool present)
 {
-  bi->online = present;
+  //bi->online = present;
+  if (!present)
+  {
+	bi->batt_present = 0;
+	power_supply_changed(&bi->battery);
+  }
 }
 EXPORT_SYMBOL(rt5025_gauge_set_online);
 
@@ -160,12 +181,18 @@ static int rt5025_get_property(struct power_supply *psy,
       break;
     case POWER_SUPPLY_PROP_HEALTH:
       val->intval = bi->health;
+	  //If there's no battery, always show battery health to good.
+	  if (!bi->present || !bi->batt_present)
+		val->intval = POWER_SUPPLY_HEALTH_GOOD;
       break;
     case POWER_SUPPLY_PROP_PRESENT:
       val->intval = bi->present;
       break;
     case POWER_SUPPLY_PROP_TEMP:
       val->intval = bi->ext_temp;
+	  //If there's no battery, always show battery temperature to 25'c.
+	  if (!bi->present || !bi->batt_present)
+		val->intval = 250;
       break;
     case POWER_SUPPLY_PROP_ONLINE:
       val->intval = bi->online;
@@ -178,9 +205,11 @@ static int rt5025_get_property(struct power_supply *psy,
       break;
     case POWER_SUPPLY_PROP_CAPACITY:
       val->intval = bi->soc;
-			//val->intval = 50;
       if (val->intval > 100)
-				val->intval = 100;
+		val->intval = 100;
+      //If there's no battery, always show capacity to 50
+      if (!bi->present || !bi->batt_present)
+		val->intval = 50;
       break;
     case POWER_SUPPLY_PROP_TECHNOLOGY:
       val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
@@ -203,18 +232,18 @@ static void rt5025_get_vcell(struct rt5025_battery_info *bi)
 {
   u8 data[2];
 	
-  if (bi->init_once)
+  if (bi->init_cap)
   {
     rt5025_clr_bits(bi->client, 0x07, 0x10);
     RTINFO("set_current switch off\n");
-    mdelay(1000);
+    msleep(300);
   }
 
   if (rt5025_read_reg(bi->client, RT5025_REG_VCELL_MSB, data, 2) < 0){
     printk(KERN_ERR "%s: Failed to read Voltage\n", __func__);
   }
 
-  if (bi->init_once)
+  if (bi->init_cap)
   {
     rt5025_set_bits(bi->client, 0x07, 0x10);
     RTINFO("set_current switch on\n");
@@ -225,7 +254,11 @@ static void rt5025_get_vcell(struct rt5025_battery_info *bi)
   else 
 	  bi->vcell = (bi->vcell + ((data[0] << 8) + data[1]) * 61 / 100) / 2;
 #if RT5025_B
-	bi->curr_offset = (15444 * bi->vcell - 27444000) / 10000;
+
+	///b. Remove current offset compensation; 2013/12/17
+	bi->curr_offset = 0;
+	//bi->curr_offset = (15444 * bi->vcell - 27444000) / 10000;
+
 #else 
   if (37 * bi->vcell > 92000)
 		bi->curr_offset = (37 * bi->vcell - 92000) / 1000;
@@ -258,18 +291,21 @@ static void rt5025_get_current(struct rt5025_battery_info *bi)
   temp = (data[0]<<8) | data[1];
   bi->curr_raw = ((temp & 0x7FFF) * 3125) / 10000;
     
-  if (data[0] & (1 << 7)) {
+  if (data[0] & (1 << 7)) 
+  {
     sign = 1;
     temp = (((temp & 0x7FFF) * 3125) / 10 + bi->curr_offset) / 1000;
-  }else{
+  }
+  else
+  {
 		if ((temp * 3125) / 10 > bi->curr_offset)
-			temp = ((temp * 3125) / 10 - bi->curr_offset) / 1000;
+		{	temp = ((temp * 3125) / 10 - bi->curr_offset) / 1000;}
 	}
 	
   if (temp < DEADBAND)
-		temp = 0;
-  
-  if (sign){
+	{	temp = 0;}
+  if (sign)
+  {
     temp *= -1;
     bi->curr_raw *= -1;
 	}
@@ -326,6 +362,8 @@ static void rt5025_get_current(struct rt5025_battery_info *bi)
   {
     bi->internal_status = POWER_SUPPLY_STATUS_CHARGING;
     bi->last_tp_flag = false;
+    ///b. add fcc update flag; 2013/12/18
+    bi->fcc_update_flag = true;
   }
   else
     bi->internal_status = POWER_SUPPLY_STATUS_DISCHARGING;
@@ -450,25 +488,29 @@ static void rt5025_get_chg_cc(struct rt5025_battery_info *bi)
   RTINFO("qh_new=%d, ql_new=%d\n", qh_new, ql_new);
 
 #if RT5025_B
-  if (qh_new > qh_old){
+  if (qh_new > qh_old)
+  {
      //cc_masec = (((qh_new<<16) + ql_new) * 50134) / 10;
      cc_masec = qh_new*328558+(qh_new*1824+ql_new*50134)/10000;
-  }else if (qh_new == qh_old){
-    if (ql_new >= ql_old){
-     //cc_masec = (((qh_new<<16) + ql_new) * 50134) / 10;
-     cc_masec = qh_new*328558+(qh_new*1824+ql_new*50134)/10000;
-    }else {  
-      //cc_masec = (((qh_old<<16) + ql_old) * 50134) / 10;
-     cc_masec = qh_old*328558+(qh_old*1824+ql_old*50134)/10000;
+  }
+  else if (qh_new == qh_old)
+  {
+    if (ql_new >= ql_old)
+    {
+    	//cc_masec = (((qh_new<<16) + ql_new) * 50134) / 10;
+    	cc_masec = qh_new*328558+(qh_new*1824+ql_new*50134)/10000;
+		}
+		else 
+		{  
+			//cc_masec = (((qh_old<<16) + ql_old) * 50134) / 10;
+			cc_masec = qh_old*328558+(qh_old*1824+ql_old*50134)/10000;
 		}
   }	
   
   if (!bi->init_once)
-	offset = bi->curr_offset * bi->time_interval;
-		   	  
-  if (cc_masec > offset){
-		cc_masec = cc_masec - (offset / 1000);
-	}
+	{	offset = bi->curr_offset * bi->time_interval;}
+  if (cc_masec > offset)
+  {	cc_masec = cc_masec - (offset / 1000);}
 #else   	
   if (qh_new > qh_old){
      cc_masec = (((qh_new<<16) + ql_new) * 5996) / 1000;
@@ -521,25 +563,28 @@ static void rt5025_get_dchg_cc(struct rt5025_battery_info *bi)
   ql_new = (data[2]<<8) + data[3];
   
 #if RT5025_B
-  if (qh_new > qh_old){
+  if (qh_new > qh_old)
+  {
      //cc_masec = (((qh_new<<16) + ql_new) * 50134) / 10;
      cc_masec = qh_new*328558+(qh_new*1824+ql_new*50134)/10000;
-  }else if (qh_new == qh_old){
-    if (ql_new >= ql_old){
-     //cc_masec = (((qh_new<<16) + ql_new) * 50134) / 10;
-     cc_masec = qh_new*328558+(qh_new*1824+ql_new*50134)/10000;
-    }else {  
-     //cc_masec = (((qh_old<<16) + ql_old) * 50134) / 10;
-     cc_masec = qh_old*328558+(qh_old*1824+ql_old*50134)/10000;
+  }
+  else if (qh_new == qh_old)
+  {
+    if (ql_new >= ql_old)
+    {
+			//cc_masec = (((qh_new<<16) + ql_new) * 50134) / 10;
+     	cc_masec = qh_new*328558+(qh_new*1824+ql_new*50134)/10000;
+    }
+    else 
+    {  
+			//cc_masec = (((qh_old<<16) + ql_old) * 50134) / 10;
+			cc_masec = qh_old*328558+(qh_old*1824+ql_old*50134)/10000;
 		}
   }	
-  
-  if (!bi->init_once)
-	offset = bi->curr_offset * bi->time_interval;
-		   	  
-  if (cc_masec != 0){
-		cc_masec = cc_masec + (offset / 1000);
-	}
+	if (!bi->init_once)
+	{	offset = bi->curr_offset * bi->time_interval;}
+  if (cc_masec != 0)
+  {	cc_masec = cc_masec + (offset / 1000);}
 #else  
   if (qh_new > qh_old){
      cc_masec = (((qh_new<<16) + ql_new) * 5996) / 1000;
@@ -566,10 +611,11 @@ static void rt5025_get_dchg_cc(struct rt5025_battery_info *bi)
 	RTINFO("dchg_cc_mAsec: %d\n", cc_masec);
 #endif
 	bi->dchg_cc = cc_masec;
-	if (bi->last_tp_flag)
-		bi->cal_fcc += cc_masec;
+	///b. add fcc update flag; 2013/12/18
+	if ((bi->last_tp_flag) && (bi->fcc_update_flag))
+	{	bi->cal_fcc += cc_masec;}
 	else
-		bi->cal_fcc = 0;
+	{	bi->cal_fcc = 0;}
 	RTINFO("bi->cal_fcc=%d, bi->last_tp_flag=%d\n", bi->cal_fcc, bi->last_tp_flag);
 	//bi->dchg_cc = (cc_masec + bi->dchg_cc_unuse) / 3600;
   //bi->dchg_cc_unuse = (cc_masec + bi->dchg_cc_unuse) % 3600;
@@ -769,8 +815,8 @@ void rt5025_gauge_irq_handler(struct rt5025_battery_info *bi, u8 irq_flag)
 	}
 	
 	//wake_lock(&bi->monitor_wake_lock);
-	wake_lock_timeout(&bi->status_wake_lock, 1.5*HZ);
-	schedule_delayed_work(&bi->monitor_work, 0);
+	//wake_lock_timeout(&bi->status_wake_lock, 1.5*HZ);
+	//schedule_delayed_work(&bi->monitor_work, 0);
 }
 EXPORT_SYMBOL(rt5025_gauge_irq_handler);
 
@@ -826,19 +872,49 @@ static void rt5025_init_capacity(struct rt5025_battery_info *bi)
 
 static void rt5025_smooth_soc(struct rt5025_battery_info *bi)
 {
-	if ((bi->internal_status == POWER_SUPPLY_STATUS_CHARGING || bi->tp_flag == 1) &&
+	if ((bi->internal_status == POWER_SUPPLY_STATUS_CHARGING || bi->tp_flag) &&
 	    (bi->soc < 100))
 	{
-		bi->soc++;
+		if(bi->last_suspend  == true)
+		{
+			bi->soc = 100; 
+			bi->last_suspend = false;
+		}
+		else
+		{	bi->soc++;}
 		bi->rm = bi->fcc * bi->soc * 36;
 		rt5025_convert_masec_to_permille(bi);
+		if(bi->soc == 100)
+		{
+			wake_unlock(&bi->smooth100_wake_lock);
+			bi->last_tp = true;
+			bi->tp_flag = false;
+			bi->pre_soc = bi->soc;
+			
+			///c. Only EOC occurs and full discharge to update FCC; 2013/12/17
+			bi->last_tp_flag = true;
+			mutex_lock(&bi->status_change_lock);
+			if (bi->status != POWER_SUPPLY_STATUS_DISCHARGING)
+			{
+				bi->status = POWER_SUPPLY_STATUS_FULL;
+			}
+			mutex_unlock(&bi->status_change_lock);
+		}
 	}
 	else if ((bi->internal_status == POWER_SUPPLY_STATUS_DISCHARGING) &&
 	          (bi->soc > 0))
 	{
-		bi->soc--;
+		if(bi->last_suspend  == true)
+		{
+			bi->soc = 0; 
+			bi->last_suspend = false;
+		}
+		else
+			bi->soc--;
 		bi->rm = bi->fcc * bi->soc * 36;
 		rt5025_convert_masec_to_permille(bi);
+		if(bi->soc == 0)
+			wake_unlock(&bi->smooth0_wake_lock);	
 	}
 	else
 	{
@@ -878,57 +954,120 @@ static void rt5025_soc_irreversible(struct rt5025_battery_info *bi)
 static void rt5025_soc_lock(struct rt5025_battery_info *bi)
 {
 	 // lock 99%
-  RTINFO("internal status=%d, tp_flag=%d, soc=%d\n", bi->internal_status, bi->tp_flag, bi->soc);
+  RTINFO("internal status=%d, tp_flag=%d, soc=%d, soc99_lock_cnt=%d\n", bi->internal_status, bi->tp_flag, bi->soc, bi->soc99_lock_cnt);
   if (bi->soc >= 99) 
   {
-  	if (bi->tp_flag)
-      		bi->soc = 100;
-		else if(bi->internal_status == POWER_SUPPLY_STATUS_CHARGING)
+  	if (bi->soc99_lock_cnt >= 1800)
+  	{
+  		bi->soc = 100;
+  		wake_unlock(&bi->full_battery_wake_lock);	
+  		bi->soc99_lock_cnt = 0;
+			bi->last_tp = true;
+			bi->tp_flag = false;
+			bi->pre_soc = bi->soc;
+			///b. add fcc update flag; 2013/12/18
+			bi->fcc_update_flag = false;
+			
+			///a. When SOC = 100, report battery status is full; 2013/12/17
+			/*
+			bi->status = POWER_SUPPLY_STATUS_FULL;
+			*/	
+  	}  
+  	else if (bi->tp_flag)
+  	{
+  		bi->soc = 100;  
+  		wake_unlock(&bi->full_battery_wake_lock);	  
+  		bi->soc99_lock_cnt = 0;
+  		bi->last_tp = true;
+		bi->tp_flag = false;
+		bi->pre_soc = bi->soc;
+			
+		///c. Only EOC occurs and full discharge to update FCC; 2013/12/17
+		bi->last_tp_flag = true;
+
+		mutex_lock(&bi->status_change_lock);
+		if (bi->status != POWER_SUPPLY_STATUS_DISCHARGING)
 		{
-				bi->soc = 99;
-				bi->pre_soc = 99;
+  			bi->status = POWER_SUPPLY_STATUS_FULL;
+		}
+		mutex_unlock(&bi->status_change_lock);
+  	}
+		else if((bi->internal_status == POWER_SUPPLY_STATUS_CHARGING)  && 
+						(bi->last_tp == false) )
+		{
+			bi->soc = 99;
+			bi->pre_soc = 99;
+			bi->soc99_lock_cnt += bi->time_interval;
 		}
   }
   else if ((bi->soc < 99) && (bi->tp_flag))
   {
-		if (!bi->last_suspend)
-		{
-			bi->update_time = SMOOTH_POLL;
-			bi->smooth_flag = true;
-			rt5025_smooth_soc(bi);
-		}
-		else
-			bi->last_suspend=false;
+		wake_lock(&bi->smooth100_wake_lock);	
+		bi->update_time = SMOOTH_POLL;
+		bi->smooth_flag = true;
+		rt5025_smooth_soc(bi);
   }
   else
   {
+		wake_unlock(&bi->smooth100_wake_lock);	
 		bi->tp_flag = false;
+		bi->soc99_lock_cnt = 0;
   }
-
+ 	/// a. When SOC = 100, report battery status is full; 2013/12/17
+ 	/// a. judge charging status to check battery full condition; 2013/12/18
+ 	if((bi->soc == 100) && (bi->internal_status == POWER_SUPPLY_STATUS_CHARGING))
+ 	{
+		mutex_lock(&bi->status_change_lock);
+		if (bi->status != POWER_SUPPLY_STATUS_DISCHARGING)
+		{
+ 			bi->status = POWER_SUPPLY_STATUS_FULL;
+		}
+		mutex_unlock(&bi->status_change_lock);
+ 	}
+  
   // lock 1%   
   if ((bi->soc <= 1) &&
-      (bi->internal_status == POWER_SUPPLY_STATUS_DISCHARGING)){
+      (bi->internal_status == POWER_SUPPLY_STATUS_DISCHARGING))
+  {
     if (bi->edv_flag)
       bi->soc = 0;
     else
     {
-			bi->soc = 1;
-			bi->pre_soc = 1; 
+			if(bi->rm <= 0)
+			{
+				bi->soc1_lock_cnt += bi->time_interval;
+				if(bi->soc1_lock_cnt >= 600)
+				{
+					bi->soc = 0;
+					bi->soc1_lock_cnt = 0;
+				}	
+				else 
+				{
+					bi->soc = 1;
+					bi->pre_soc = 1;	
+				}
+			}
+			else
+			{
+				bi->soc = 1;
+				bi->pre_soc = 1;
+				bi->soc1_lock_cnt = 0;
+			} 
 		}
-      
-	}else if ((bi->soc > 1) &&
+	}
+	else if ((bi->soc > 1) &&
             (bi->internal_status == POWER_SUPPLY_STATUS_DISCHARGING) &&
-            (bi->edv_flag)){
-		if (!bi->last_suspend)
-		{
-			bi->update_time = SMOOTH_POLL;
-			bi->smooth_flag = true;
-			rt5025_smooth_soc(bi);
-		}
-		else
-			bi->last_suspend=false;
-	}else{
+            (bi->edv_flag))
+  {
+		wake_lock(&bi->smooth0_wake_lock);	
+		bi->update_time = SMOOTH_POLL;
+		bi->smooth_flag = true;
+		rt5025_smooth_soc(bi);
+	}
+	else
+	{
 		bi->edv_flag = false;
+		wake_unlock(&bi->smooth0_wake_lock);	
 	}
 }
 
@@ -939,14 +1078,22 @@ static void rt5025_get_soc(struct rt5025_battery_info *bi)
     bi->update_time = NORMAL_POLL;
   }
 	RTINFO("before rm=%d\n", bi->rm);
-	if ((!bi->tp_flag) &&
-			(!bi->edv_flag)){
+	if ((!bi->tp_flag) && (!bi->edv_flag))
+	{
 		bi->rm = (bi->rm + bi->chg_cc) > bi->dchg_cc ? 
 		            bi->rm + bi->chg_cc - bi->dchg_cc : 0;
 		if (bi->rm > (bi->fcc * 3600))
-					bi->rm = bi->fcc * 3600;
+		{	bi->rm = bi->fcc * 3600;}
 		rt5025_convert_masec_to_permille(bi);
+		///a. When SOC = 100, report battery status is full; 2113/12/17
 		bi->soc = DIV_ROUND_UP(bi->permille, 10);
+		/*
+		if (bi->status == POWER_SUPPLY_STATUS_DISCHARGING)
+		{	bi->soc = DIV_ROUND_UP(bi->permille, 10);}
+		else if (bi->status == POWER_SUPPLY_STATUS_CHARGING)
+		{	bi->soc = bi->permille/10;}
+		*/
+	}
 #if RT5025_CSV
     bi->temp_soc = bi->soc;
     //pr_info("%d", bi->soc);
@@ -954,7 +1101,6 @@ static void rt5025_get_soc(struct rt5025_battery_info *bi)
 	RTINFO("after rm=%d\n", bi->rm);
 		RTINFO("temp_soc=%d\n", bi->soc);
 #endif
-  }
 #if RT5025_CSV
 	RTINFO("soc=%d, permille=%d, rm=%d, fcc=%d, smooth_flag=%d\n", bi->soc,bi->permille,bi->rm,bi->fcc,bi->smooth_flag);
  // pr_info("%d,%d,%d,%d,%d", bi->soc,bi->permille,bi->rm,bi->fcc,bi->smooth_flag);
@@ -1063,8 +1209,8 @@ static void rt5025_soc_relearn_check(struct rt5025_battery_info *bi)
   }*/
   if (bi->internal_status == POWER_SUPPLY_STATUS_CHARGING) 
 	  bi->edv_flag = false;
-  if (bi->status != POWER_SUPPLY_STATUS_FULL)
-    bi->tp_flag = false;
+  //if (bi->status != POWER_SUPPLY_STATUS_FULL)
+  //  bi->tp_flag = false;
 
 #if RT5025_CSV
   //pr_err("%d,%d,%d,%d,%d", 
@@ -1274,7 +1420,7 @@ static int rt5025_battery_parameter_initcheck(struct rt5025_battery_info *bi)
 	u8 data[12] = {0};
 	int ret = 0;
 
-	if (rt5025_read_reg(bi->client, 0x21, data, 12)<0)
+	if (rt5025_read_reg(bi->client, 0x21, data, 12) < 0)
 	{
 		pr_err("%s: check initial value error\n", __func__);
 		return 0;
@@ -1310,6 +1456,7 @@ static void rt5025_register_init(struct rt5025_battery_info *bi)
 	bi->dchg_cc_unuse = 0;
 	bi->pre_gauge_timer = 0;
 	bi->online = 1;
+	bi->batt_present = 1;
 	bi->status = bi->internal_status = POWER_SUPPLY_STATUS_DISCHARGING;
 	bi->health = POWER_SUPPLY_HEALTH_GOOD;
 	
@@ -1333,6 +1480,7 @@ static void rt5025_register_init(struct rt5025_battery_info *bi)
 	bi->cycle_cnt = 0;
 	bi->empty_edv = rt5025_battery_param2[4].x;
 	bi->edv_region = 0;
+	bi->soc1_lock_cnt = 0;
 
 	// if has initial data, rewrite to the stored data
 	if (rt5025_battery_parameter_initcheck(bi))
@@ -1552,6 +1700,7 @@ static void rt5025_soc_temp_comp(struct rt5025_battery_info *bi)
 
 static void rt5025_update(struct rt5025_battery_info *bi)
 {
+  int batt_type = 1;
   /* Update voltage */
   rt5025_get_vcell(bi);
   /* Update current */
@@ -1588,6 +1737,31 @@ static void rt5025_update(struct rt5025_battery_info *bi)
   /* SOC Control Process */
   rt5025_soc_lock(bi);
   rt5025_soc_irreversible(bi);
+	
+	if(bi->soc <= 99)
+  {	bi->last_tp = false;}
+
+  if (rt5025_battery_param1[0].x >= 4250)
+	{	batt_type = 0;}
+  else if (rt5025_battery_param1[0].x >= 4100)
+	{	batt_type = 1;}
+
+  switch (batt_type)
+  {
+	case 0:
+  		if ((bi->vcell >= 4250) && (bi->internal_status == POWER_SUPPLY_STATUS_CHARGING))
+  			wake_lock(&bi->full_battery_wake_lock);	
+  		else 
+   			wake_unlock(&bi->full_battery_wake_lock);
+		break;
+	case 1:
+	default:
+  		if ((bi->vcell >= 4100) && (bi->internal_status == POWER_SUPPLY_STATUS_CHARGING))
+  			wake_lock(&bi->full_battery_wake_lock);	
+  		else 
+   			wake_unlock(&bi->full_battery_wake_lock);
+		break;
+  }
   
   /* Update RTTF or RTTE */
   //rt5025_run_time(bi);
@@ -1702,8 +1876,10 @@ static int rt5025_battery_suspend(struct platform_device *pdev, pm_message_t sta
 	rt5025_alert_setting(bi,MAXVOLT, false);
 	rt5025_alert_setting(bi,MINVOLT1,false);
 	rt5025_battery_sleepvth_setting(bi);
-	rt5025_alert_setting(bi,MAXVOLT, true);
-	rt5025_alert_setting(bi,MINVOLT1,true);
+	if (bi->status == POWER_SUPPLY_STATUS_CHARGING)
+		rt5025_alert_setting(bi,MAXVOLT, true);
+	else if (bi->status == POWER_SUPPLY_STATUS_DISCHARGING)
+		rt5025_alert_setting(bi,MINVOLT1,true);
 	RTINFO("RM=%d\n",bi->rm);
 	return 0;
 }
@@ -1768,9 +1944,13 @@ static int rt5025_battery_probe(struct platform_device *pdev)
 	wake_lock_init(&bi->monitor_wake_lock, WAKE_LOCK_SUSPEND, "rt-battery-monitor");
 	wake_lock_init(&bi->low_battery_wake_lock, WAKE_LOCK_SUSPEND, "low_battery_wake_lock");
 	wake_lock_init(&bi->status_wake_lock, WAKE_LOCK_SUSPEND, "battery-status-changed");
+	wake_lock_init(&bi->smooth100_wake_lock, WAKE_LOCK_SUSPEND, "smooth100_soc_wake_lock");
+	wake_lock_init(&bi->smooth0_wake_lock, WAKE_LOCK_SUSPEND, "smooth0_soc_wake_lock");
+	wake_lock_init(&bi->full_battery_wake_lock, WAKE_LOCK_SUSPEND, "full_battery_wake_lock");
 #if RT5025_TEST_WAKE_LOCK
 	wake_lock_init(&bi->test_wake_lock, WAKE_LOCK_SUSPEND, "rt-test");
 #endif
+	mutex_init(&bi->status_change_lock);
   	/* Write trimed data */
 	//rt5025_pretrim(client);
 	/* enable channel */
@@ -1809,7 +1989,7 @@ static int rt5025_battery_probe(struct platform_device *pdev)
 #if RT5025_TEST_WAKE_LOCK
 	wake_lock(&bi->test_wake_lock);
 #endif
-	schedule_delayed_work(&bi->monitor_work, msecs_to_jiffies(INIT_POLL*MSEC_PER_SEC));
+	schedule_delayed_work(&bi->monitor_work, INIT_POLL*HZ);
 	chip->battery_info = bi;
 
 	pr_info("rt5025-battery driver is successfully loaded\n");
@@ -1829,7 +2009,17 @@ static void rt5025_battery_shutdown(struct platform_device *pdev)
 	RTINFO("\n");
 	if (bi->soc == 0 && bi->cal_fcc != 0 )
 	{
-		bi->fcc_aging = bi->cal_fcc/3600 - (bi->fcc -bi->fcc_aging);
+		///d. FCC update limitation +/-3%; 2013/12/27
+		//bi->fcc_aging = bi->cal_fcc/3600 - (bi->fcc -bi->fcc_aging);
+		u16 fcc_new  = 0;
+		fcc_new = bi->cal_fcc/3600 - (bi->fcc - bi->fcc_aging);
+		if(fcc_new > ((bi->fcc_aging*103)/100))
+		{	bi->fcc_aging = (bi->fcc_aging*103)/100;}
+		else if(fcc_new < ((bi->fcc_aging*97)/100))
+		{	bi->fcc_aging = (bi->fcc_aging*97)/100;}
+		else
+		{	bi->fcc_aging = fcc_new;}
+		
 		RTINFO("bi->cal_fcc=%d\n", bi->cal_fcc);
 	}
 	rt5025_battery_parameter_backup(bi);
@@ -1853,7 +2043,7 @@ static int __init rt5025_battery_init(void)
 {
 	return platform_driver_register(&rt5025_battery_driver);
 }
-module_init(rt5025_battery_init);
+fs_initcall(rt5025_battery_init);
 
 static void __exit rt5025_battery_exit(void)
 {

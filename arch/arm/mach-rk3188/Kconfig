@@ -48,8 +48,17 @@ config MACH_RK3188_RK618
 
 config MACH_RK3188_FT
 	bool "RK3188 FT Board"
+	select LZO_COMPRESS
+        select LZO_DECOMPRESS
 config MACH_RK3188_AC
         bool "RK3188 android computer board"
+config MACH_RK3188_NOTEBOOK
+    bool "RK3188 notebook board"
+    
+#$_rbox_$_modify_$_begin		
+config MACH_RK3188_BOX
+	bool "RK3188 Box Board"
+#$_rbox_$_modify_$_end
 
 endchoice
 
@@ -61,6 +70,24 @@ config MACH_RK3188M_TB
 	bool "RK3188m Top Board"
 	
 config MACH_RK3188M_F304
-	bool "RK3188m F304 Board"
+	bool "RK3188m F304 Board"	
 
 endchoice
+
+#$_rbox_$_modify_$_begin
+choice
+	prompt "RK3188 Box Board Type"
+	depends on MACH_RK3188_BOX
+	default MACH_RK3188_BOX_PANCAKE
+
+	config MACH_RK3188_BOX_PANCAKE
+	bool "Pancake(SDK)"
+	
+	config MACH_RK3188_BOX_HOTDOG
+	bool "Hotdog(Dongle)"
+	
+	config MACH_RK3188_BOX_COSTDOWN
+	bool "Costdown"
+
+endchoice
+#$_rbox_$_modify_$_end

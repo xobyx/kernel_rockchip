@@ -477,6 +477,10 @@ config SND_SOC_RK3026
 	tristate
 	depends on ARCH_RK3026
 
+config SND_SOC_RK3190
+	tristate
+	#depends on ARCH_RK3190
+
 config SND_SOC_RT5512
        tristate
 config SND_SOC_CX2070X

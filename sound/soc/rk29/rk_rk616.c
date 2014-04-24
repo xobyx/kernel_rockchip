@@ -23,7 +23,7 @@
 #include "rk29_pcm.h"
 #include "rk29_i2s.h"
 
-#if 1
+#if 0
 #define	DBG(x...)	printk(KERN_INFO x)
 #else
 #define	DBG(x...)
@@ -153,12 +153,11 @@ static int rk_hifi_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	DBG("Enter:%s, %d, rate=%d\n", __FUNCTION__, __LINE__, params_rate(params));
-
 	#if defined(CONFIG_RK616_USE_MCLK_12M)
 	/* MCLK must be 12M when RK616 HDMI is in */
 	if (get_hdmi_state() && pll_out != 12000000) {
 		DBG("%s : HDMI is in, don't set sys clk %u\n",__FUNCTION__, pll_out);
-		goto __setdiv;
+		//goto __setdiv;
 	}
 	#endif
 
@@ -218,7 +217,7 @@ static int rk_voice_hw_params(struct snd_pcm_substream *substream,
 	#if defined(CONFIG_RK616_USE_MCLK_12M)
 	if (get_hdmi_state() && pll_out != 12000000) {
 		DBG("%s : HDMI is in, set mclk to 12Mn",__FUNCTION__);
-		pll_out = 12000000;
+		//pll_out = 12000000;
 	}
 	#endif
 
@@ -249,7 +248,7 @@ static struct snd_soc_dai_link rk_dai[] = {
 	{
 		.name = "RK616 I2S1",
 		.stream_name = "RK616 PCM",
-		.codec_name = "rk616-codec.4-0050",
+		.codec_name = "rk616-codec.2-0050",
 		.platform_name = "rockchip-audio",
 #if defined(CONFIG_SND_RK29_SOC_I2S_8CH)
 		.cpu_dai_name = "rk29_i2s.0",
@@ -263,7 +262,7 @@ static struct snd_soc_dai_link rk_dai[] = {
 	{
 		.name = "RK616 I2S2",
 		.stream_name = "RK616 PCM",
-		.codec_name = "rk616-codec.4-0050",
+		.codec_name = "rk616-codec.2-0050",
 		.platform_name = "rockchip-audio",
 #if defined(CONFIG_SND_RK29_SOC_I2S_8CH)
 		.cpu_dai_name = "rk29_i2s.0",
@@ -281,6 +280,7 @@ static struct snd_soc_card snd_soc_card_rk = {
 	.num_links = 2,
 };
 
+
 static struct platform_device *rk_snd_device;
 
 static int __init audio_card_init(void)
@@ -289,12 +289,13 @@ static int __init audio_card_init(void)
 
 	DBG("Enter::%s----%d\n",__FUNCTION__,__LINE__);
 
-	rk_snd_device = platform_device_alloc("soc-audio", -1);
+	if (rk616_get_for_mid())
+		snd_soc_card_rk.name = "RK_RK616_TINY";
+	rk_snd_device = platform_device_alloc("soc-audio", -5);
 	if (!rk_snd_device) {
 		  printk("platform device allocation failed\n");
 		  return -ENOMEM;
 	}
-
 	platform_set_drvdata(rk_snd_device, &snd_soc_card_rk);
 	ret = platform_device_add(rk_snd_device);
 	if (ret) {
@@ -303,8 +304,7 @@ static int __init audio_card_init(void)
 		platform_device_put(rk_snd_device);
 		return ret;
 	}
-
-        return ret;
+	return ret;
 }
 
 static void __exit audio_card_exit(void)

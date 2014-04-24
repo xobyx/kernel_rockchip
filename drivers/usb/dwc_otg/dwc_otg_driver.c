@@ -521,7 +521,7 @@ static ssize_t force_usb_mode_store(struct device_driver *_drv, const char *_buf
 	}	
 	return _count;	
 }
-static DRIVER_ATTR(force_usb_mode, 0666/*S_IRUGO|S_IWUSR*/, force_usb_mode_show, force_usb_mode_store);
+static DRIVER_ATTR(force_usb_mode, S_IRUGO|S_IWUSR|S_IWGRP, force_usb_mode_show, force_usb_mode_store);
 #endif
 static ssize_t dwc_otg_enable_show( struct device *_dev, 
 								struct device_attribute *attr, char *buf)
@@ -1268,7 +1268,7 @@ static __devinit int dwc_otg_driver_probe(struct platform_device *pdev)
 	 * 0x45F42XXX, which corresponds to "OT2", as in "OTG version 2.XX".
 	 */
 	snpsid = dwc_read_reg32((uint32_t *)((uint8_t *)dwc_otg_device->base + 0x40));
-	if ((snpsid & 0xFFFFF000) != 0x4F542000) 
+	if (((snpsid & 0xFFFFF000) != 0x4F542000) && ((snpsid & 0xFFFFF000) != 0x4F543000))
 	{
 		dev_err(dev, "Bad value for SNPSID: 0x%08x\n", snpsid);
 		retval = -EINVAL;
@@ -1639,7 +1639,7 @@ static __devinit int host20_driver_probe(struct platform_device *pdev)
 	 * 0x45F42XXX, which corresponds to "OT2", as in "OTG version 2.XX".
 	 */
 	snpsid = dwc_read_reg32((uint32_t *)((uint8_t *)dwc_otg_device->base + 0x40));
-	if ((snpsid & 0xFFFFF000) != 0x4F542000) 
+	if (((snpsid & 0xFFFFF000) != 0x4F542000) && ((snpsid & 0xFFFFF000) != 0x4F543000))
 	{
 	                DWC_PRINT("%s::snpsid=0x%x,want 0x%x" , __func__ , snpsid , 0x4F542000 );
 		dev_err(dev, "Bad value for SNPSID: 0x%08x\n", snpsid);

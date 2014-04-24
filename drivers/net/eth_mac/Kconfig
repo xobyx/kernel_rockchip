@@ -49,3 +49,12 @@ config  PHY_PORT_NUM
                       ---More---
 
 
+config RK_PHY_REG_SYS
+        tristate "RK ethernet PHY reg sys file support"
+        depends on RK29_VMAC
+        select MII
+        select PHYLIB
+        select CRC32
+        help
+          See and Set phy reg on sys file
+

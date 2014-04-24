@@ -202,12 +202,11 @@ static int cx2070x_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	//struct cx2070x_codec_chip *chip = snd_soc_codec_get_drvdata(codec);
 	//int err = 0;
-    printk(">>>>>>>>>>%s",__FUNCTION__);
-	snd_soc_dapm_new_controls(dapm, cx2070x_dapm_widgets,
-				ARRAY_SIZE(cx2070x_dapm_widgets));
+	//snd_soc_dapm_new_controls(dapm, cx2070x_dapm_widgets,
+				//ARRAY_SIZE(cx2070x_dapm_widgets));
 
-	snd_soc_dapm_add_routes(dapm, cx2070x_audio_map,
-				ARRAY_SIZE(cx2070x_audio_map));
+	//snd_soc_dapm_add_routes(dapm, cx2070x_audio_map,
+				//ARRAY_SIZE(cx2070x_audio_map));
 #if FOR_MID
     snd_soc_dapm_disable_pin(dapm, "Mic Jack");
 	snd_soc_dapm_disable_pin(dapm, "BT IN");
@@ -253,7 +252,6 @@ static int __init audio_card_init(void)
 	platform_set_drvdata(rk29_snd_device, &snd_soc_card_rk29);
 
 	ret = platform_device_add(rk29_snd_device);
-    printk(">>>>>>>>>>%s ret = %d",__FUNCTION__, ret);
 	if (ret)
 		platform_device_put(rk29_snd_device);
 

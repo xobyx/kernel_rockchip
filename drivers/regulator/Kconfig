@@ -312,6 +312,11 @@ config RK30_PWM_REGULATOR
 	help
 	  Say Y to enable support for the voltage regulators control on the RK30 .
 
+config RK30_PWM_REGULATOR_ARM_LOGIC
+	tristate "pwm voltage regulator for rk30 arm and logic"
+	help
+	  Say Y to enable support for the arm and logic voltage regulators control on the RK30.
+
 config REGULATOR_88PM8607
 	bool "Marvell 88PM8607 Power regulators"
 	depends on MFD_88PM860X=y
