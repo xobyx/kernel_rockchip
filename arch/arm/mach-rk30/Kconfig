@@ -195,3 +195,6 @@ choice
 	bool "Hotdog(Dongle)"
 
 endchoice
+
+config MK808B_RK903_MAWKISH_PATCH
+        bool "Enable Mawkish's RK903 Patch for MK808B"

@@ -1,0 +1,4 @@
+TOOLCHAIN=arm-linux-gnueabihf-
+
+ARCH=arm CROSS_COMPILE=$TOOLCHAIN make mk808b_defconfig
+ARCH=arm CROSS_COMPILE=$TOOLCHAIN make -j4
