@@ -1745,7 +1745,7 @@ static int rk_platform_add_display_devices(void)
 #endif
 
 #ifdef CONFIG_BACKLIGHT_RK29_BL
-	//bl = &rk29_device_backlight,
+	bl = &rk29_device_backlight,
 #endif
 	__rk_platform_add_display_devices(fb,lcdc0,lcdc1,bl);
 
