@@ -445,8 +445,11 @@ int hdmi_ouputmode_select(struct hdmi *hdmi, int edid_ok)
 	int i, pixclock;
 	
 	if(edid_ok != HDMI_ERROR_SUCESS) {
-		dev_err(hdmi->dev, "warning: EDID error, assume sink as DVI !!!!");
-		hdmi->edid.sink_hdmi = 0;
+		//dev_err(hdmi->dev, "warning: EDID error, assume sink as DVI !!!!");
+		//hdmi->edid.sink_hdmi = 0;
+		dev_err(hdmi->dev, "warning: EDID error, assume sink as HDMI!!!!"); 
+		hdmi->edid.sink_hdmi = 1; 
+		hdmi->edid.base_audio_support = 1;
 	}
 
 	if(edid_ok != HDMI_ERROR_SUCESS) {
