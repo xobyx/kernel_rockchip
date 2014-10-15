@@ -84,6 +84,23 @@ static int hdmi_edid_parse_dtd(unsigned char *block, struct fb_videomode *mode)
 	return E_HDMI_EDID_SUCCESS;
 }
 
+void base_modes_to_vic(struct hdmi_edid *pedid)
+{
+	struct fb_videomode *modes = pedid->specs->modedb; // list of all available timings (est, std, dtd)
+	int i, vic, count = pedid->specs->modedb_len;
+
+	hdmi_edid_debug("[HDMI-EDID] count of base modes is %d\n", count);
+	for(i = 0; i < count; i++)
+	{
+		vic = hdmi_videomode_to_vic(&modes[i]);
+		if (vic){
+			hdmi_edid_debug("[HDMI-EDID] CEA mode %d added from base modes.\n", vic);
+			hdmi_add_vic(vic, &pedid->modelist);
+		}
+		i++;
+	}
+}
+
 int hdmi_edid_parse_base(unsigned char *buf, int *extend_num, struct hdmi_edid *pedid)
 {
 	int rc, i;
@@ -132,7 +149,7 @@ int hdmi_edid_parse_base(unsigned char *buf, int *extend_num, struct hdmi_edid *
 		return E_HDMI_EDID_NOMEMORY;
 		
 	fb_edid_to_monspecs(buf, pedid->specs);
-	
+	base_modes_to_vic(pedid); // g2t: add base modes to modelist.vic
     return E_HDMI_EDID_SUCCESS;
 }
 
