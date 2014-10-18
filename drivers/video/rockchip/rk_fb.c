@@ -576,6 +576,9 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 			printk("rk fb use %d buffers\n",enable);
 			break;
 		case RK_FBIOSET_VSYNC_ENABLE:
+#ifdef CONFIG_VSYNCFIX
+			return 0;
+#endif
 			if (copy_from_user(&enable, argp, sizeof(enable)))
 				return -EFAULT;
 			dev_drv->vsync_info.active = enable;

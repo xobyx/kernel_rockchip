@@ -20,6 +20,11 @@ config DISPLAY_KEY_LED_CONTROL
 	default n
 	help
 	   slect y if you need use led to indicate display status.
+	   
+config VSYNCFIX
+	bool "sam321's Vsync fix (modified by phjanderson)"
+	   help
+	   Enable sam321's Vsync fix.
 
 source "drivers/video/rockchip/lcdc/Kconfig"
 source "drivers/video/rockchip/screen/Kconfig"
