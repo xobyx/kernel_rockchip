@@ -960,7 +960,11 @@ static struct rfkill_rk_platform_data rfkill_rk_platdata = {
     .type               = RFKILL_TYPE_BLUETOOTH,
 
     .poweron_gpio       = { // BT_REG_ON
-        .io             = RK30_PIN3_PC7, //RK30_PIN3_PC7,
+		#ifdef CONFIG_IMITO_QX1
+        .io             = RK30_PIN3_PD1,
+		#else
+		.io             = RK30_PIN3_PC7, //RK30_PIN3_PC7,
+		#endif
         .enable         = GPIO_HIGH,
         .iomux          = {
             .name       = "bt_poweron",
@@ -1453,8 +1457,13 @@ static struct pmu_info  act8846_dcdc_info[] = {
 	},
 	{
 		.name          = "act_dcdc4",   //vccio
+		#ifdef CONFIG_IMITO_QX1
+		.min_uv          = 3000000,
+		.max_uv         = 3000000,
+		#else
 		.min_uv          = 3300000,
 		.max_uv         = 3300000,
+		#endif
 		#ifdef CONFIG_ACT8846_SUPPORT_RESET
 		.suspend_vol  =  3000000,
 		#else
@@ -1491,8 +1500,13 @@ static  struct pmu_info  act8846_ldo_info[] = {
 	},
 	{
 		.name          = "act_ldo6",   //vcc_jetta
+		#ifdef CONFIG_IMITO_QX1
+		.min_uv          = 3300000,
+		.max_uv         = 3300000,
+		#else
 		.min_uv          = 1800000,
 		.max_uv         = 1800000,
+		#endif
 	},
 	{
 		.name          = "act_ldo7",   //vcc18
