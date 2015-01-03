@@ -960,11 +960,7 @@ static struct rfkill_rk_platform_data rfkill_rk_platdata = {
     .type               = RFKILL_TYPE_BLUETOOTH,
 
     .poweron_gpio       = { // BT_REG_ON
-		#ifdef CONFIG_IMITO_QX1
-        .io             = RK30_PIN3_PD1,
-		#else
 		.io             = RK30_PIN3_PC7, //RK30_PIN3_PC7,
-		#endif
         .enable         = GPIO_HIGH,
         .iomux          = {
             .name       = "bt_poweron",
@@ -1017,6 +1013,43 @@ static struct platform_device device_rfkill_rk = {
     .dev    = {
         .platform_data = &rfkill_rk_platdata,
     },
+};
+#endif
+
+#if defined CONFIG_TCC_BT_DEV
+static struct tcc_bt_platform_data tcc_bt_platdata = {
+
+    .power_gpio   = { // ldoon
+		#ifdef CONFIG_IMITO_QX1
+        .io             =  RK30_PIN3_PD1,
+		#else
+		.io             =  RK30_PIN3_PC7,
+		#endif
+        .enable         = GPIO_HIGH,
+        .iomux          = {
+            .name       = NULL,
+            },
+        },
+
+    .wake_host_gpio  = { // BT_HOST_WAKE, for bt wakeup host when it is in deep sleep
+		#ifdef CONFIG_IMITO_QX1
+		.io			= RK30_PIN3_PC6,
+		#else
+        .io         = RK30_PIN3_PD0, // set io to INVALID_GPIO for disable it
+		#endif
+        .enable     = IRQF_TRIGGER_RISING,// set IRQF_TRIGGER_FALLING for falling, set IRQF_TRIGGER_RISING for rising
+        .iomux      = {
+            .name       = NULL,
+        },
+    },
+};
+
+static struct platform_device device_tcc_bt = {
+    .name   = "tcc_bt_dev",
+    .id     = -1,
+    .dev    = {
+        .platform_data = &tcc_bt_platdata,
+        },
 };
 #endif
 
@@ -1247,6 +1280,9 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #ifdef CONFIG_MT5931_MT6622
 	&device_mt6622,
+#endif
+#ifdef CONFIG_TCC_BT_DEV
+	&device_tcc_bt,
 #endif
 /*$_rbox_$_modify_$_huangzhibao_begin$_20120508_$*/
 #ifdef CONFIG_RK_REMOTECTL	

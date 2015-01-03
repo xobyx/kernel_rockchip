@@ -1854,7 +1854,9 @@ static int sdmmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
     //if( strncmp( mmc_hostname(host) ,"mmc0" , strlen("mmc0")) )
     if(host->host_dev_id == 1)
     {
-	    //sdio_reset(host);//make no sense; noteed by xbw at 2011-12-14
+#if defined(CONFIG_RTL8723AS) || defined(CONFIG_RTL8723BS) || defined(CONFIG_RTL8189ES)
+		sdio_reset(host); //make no sense; noteed by xbw at 2011-12-14
+#endif
     	mmc_go_idle(host);
 
     	if (!(init_ret=mmc_attach_sdio(host)))

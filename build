@@ -1,0 +1,41 @@
+#!/bin/bash
+# Bash Menu Script Example
+
+TOOLCHAIN=arm-linux-gnueabihf-
+
+CONFIG=""
+
+while true; do
+    read -p "Do you wish to run mrproper? [y/n]" yn
+    case $yn in
+        [Yy]* ) make mrproper; break;;
+        [Nn]* ) break;;
+        * ) echo "Please answer yes or no.";;
+    esac
+done
+
+echo -e "\e[32mSelect device\e[0m"
+
+PS3='Please enter your choice: '
+options=("MK808B Original (RK903)" "MK808B v5 (RTL8723BS)" "MK808B MTK Clone (MediaTek MT5931 & MT6622)")
+select opt in "${options[@]}"
+do
+    case $opt in
+        "MK808B Original (RK903)")
+            CONFIG="mk808b_defconfig"
+            break
+            ;;
+        "MK808B v5 (RTL8723BS)")
+            CONFIG="mk808b_v5_defconfig"
+            break
+            ;;
+        "MK808B MTK Clone (MediaTek MT5931 & MT6622)")
+            CONFIG="mk808b_mtk_defconfig"
+            break
+            ;;
+        *) echo invalid option;;
+    esac
+done
+
+ARCH=arm CROSS_COMPILE=$TOOLCHAIN make $CONFIG
+ARCH=arm CROSS_COMPILE=$TOOLCHAIN make -j4

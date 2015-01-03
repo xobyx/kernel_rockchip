@@ -92,5 +92,5 @@ choice
 endchoice
 #$_rbox_$_modify_$_end
 
-config CONFIG_IMITO_QX1
+config IMITO_QX1
 	bool "iMito QX1 Dongle"

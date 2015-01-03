@@ -258,7 +258,10 @@
     //reset
     #define RK30SDK_WIFI_GPIO_RESET_N               RK30_PIN3_PD1       // huweiguo 
     #define RK30SDK_WIFI_GPIO_RESET_ENABLE_VALUE    GPIO_HIGH    
-
+	//wake up host gpio
+	#define RK30SDK_WIFI_GPIO_WIFI_INT_B            	RK30_PIN3_PD2
+	#define RK30SDK_WIFI_GPIO_WIFI_INT_B_ENABLE_VALUE   GPIO_HIGH
+	
     #elif defined(CONFIG_MT6620)
         #if !defined(CONFIG_USE_SDMMC0_FOR_WIFI_DEVELOP_BOARD)
             #define USE_SDMMC_CONTROLLER_FOR_WIFI 1
