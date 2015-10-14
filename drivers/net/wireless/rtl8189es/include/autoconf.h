@@ -32,6 +32,12 @@
 #define RTL871X_MODULE_NAME "8189ES"
 #define DRV_NAME "rtl8189es"
 
+#ifdef CONFIG_EFUSE_CONFIG_FILE
+#ifndef EFUSE_MAP_PATH
+#define EFUSE_MAP_PATH "/system/etc/wifi/wifi_efuse_8189e.map"
+#endif //EFUSE_MAP_PATH
+#endif
+
 #define CONFIG_SDIO_HCI
 #define PLATFORM_LINUX
 
@@ -207,14 +213,14 @@
 	//#define CONFIG_IOL_IOREG_CFG_DBG
 #endif
 
-
-#ifdef CONFIG_PLATFORM_ACTIONS_ATV5201
-#define CONFIG_SDIO_DISABLE_RXFIFO_POLLING_LOOP 
+#ifdef CONFIG_WOWLAN
+#define CONFIG_ARP_KEEP_ALIVE
 #endif
 
 /*
  * Outsource  Related Config
  */
+#define TESTCHIP_SUPPORT				0
 
 #define 	RTL8192CE_SUPPORT 				0
 #define 	RTL8192CU_SUPPORT 			0
@@ -230,29 +236,19 @@
 #define 	RTL8723AE_SUPPORT				0
 #define 	RTL8723A_SUPPORT				(RTL8723AU_SUPPORT|RTL8723AS_SUPPORT|RTL8723AE_SUPPORT)
 
-#define RTL8188EE_SUPPORT				0
-#define RTL8188EU_SUPPORT				0
-#define RTL8188ES_SUPPORT				1
-#define RTL8188E_SUPPORT				(RTL8188EE_SUPPORT|RTL8188EU_SUPPORT|RTL8188ES_SUPPORT)
-#define TESTCHIP_SUPPORT			0
-
-#define RTL8812E_SUPPORT				0
-#define RTL8812AU_SUPPORT				0
-#define RTL8812A_SUPPORT				(RTL8812E_SUPPORT|RTL8812AU_SUPPORT)
-
-#define RTL8821A_SUPPORT				0
-
-#define RTL8723B_SUPPORT				0
-
-#define RTL8192E_SUPPORT				0
-
-#define RTL8813A_SUPPORT				0
+#define 	RTL8188E_SUPPORT				1
+#define 	RTL8812A_SUPPORT				0
+#define 	RTL8821A_SUPPORT				0
+#define 	RTL8723B_SUPPORT				0
+#define 	RTL8192E_SUPPORT				0
+#define 	RTL8814A_SUPPORT				0
+#define 	RTL8195A_SUPPORT				0
 
 //#if (RTL8188E_SUPPORT==1)
 #define RATE_ADAPTIVE_SUPPORT 			1
 #define POWER_TRAINING_ACTIVE			1
-//#define 	CONFIG_TX_EARLY_MODE
 
+//#define 	CONFIG_TX_EARLY_MODE
 #ifdef CONFIG_TX_EARLY_MODE
 #define	RTL8188E_EARLY_MODE_PKT_NUM_10	0
 #endif
@@ -269,12 +265,19 @@
 
 #define DISABLE_BB_RF	0
 
+#define CONFIG_RF_GAIN_OFFSET
 #define CONFIG_80211D
+
+#ifdef CONFIG_GPIO_WAKEUP
+#define WAKEUP_GPIO_IDX 7
+#endif
+
+#define CONFIG_GPIO_API
 
 /*
  * Debug Related Config
  */
-#define DBG	1
+#define DBG	0
 
 //#define CONFIG_DEBUG /* DBG_871X, etc... */
 //#define CONFIG_DEBUG_RTL871X /* RT_TRACE, RT_PRINT_DATA, _func_enter_, _func_exit_ */
@@ -299,10 +302,6 @@
 //#define DBG_RX_SIGNAL_DISPLAY_PROCESSING
 //#define DBG_RX_SIGNAL_DISPLAY_SSID_MONITORED "jeff-ap"
 
-
-//#define HAL_8195A_USB 0
-
-//#define RTL8188E_FOR_MP_TEST 1
 
 //#define DOWNLOAD_FW_TO_TXPKT_BUF 0
 

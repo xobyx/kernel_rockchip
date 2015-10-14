@@ -132,23 +132,6 @@ static void fill_txdesc_phy(struct pkt_attrib *pattrib, PTXDESC_8188E ptxdesc)
 	}
 }
 
-static void rtl8188e_cal_txdesc_chksum(struct tx_desc *ptxdesc)
-{
-	u16	*usPtr = (u16*)ptxdesc;
-	u32 count = 16;		// (32 bytes / 2 bytes per XOR) => 16 times
-	u32 index;
-	u16 checksum = 0;
-
-
-	// Clear first
-	ptxdesc->txdw7 &= cpu_to_le32(0xffff0000);
-
-	for (index = 0; index < count; index++) {
-		checksum ^= le16_to_cpu(*(usPtr + index));
-	}
-
-	ptxdesc->txdw7 |= cpu_to_le32(checksum & 0x0000ffff);
-}
 //
 // Description: In normal chip, we should send some packet to Hw which will be used by Fw
 //			in FW LPS mode. The function is to fill the Tx descriptor of this packets, then
@@ -156,10 +139,11 @@ static void rtl8188e_cal_txdesc_chksum(struct tx_desc *ptxdesc)
 //
 void rtl8188e_fill_fake_txdesc(
 	PADAPTER	padapter,
-	u8*			pDesc,
-	u32			BufferLen,
-	u8			IsPsPoll,
-	u8			IsBTQosNull)
+	u8*		pDesc,
+	u32		BufferLen,
+	u8		IsPsPoll,
+	u8		IsBTQosNull,
+	u8		bDataFrame)
 {
 	struct tx_desc *ptxdesc;
 
@@ -196,6 +180,36 @@ void rtl8188e_fill_fake_txdesc(
 
 	//offset 16
 	ptxdesc->txdw4 |= cpu_to_le32(BIT(8));//driver uses rate
+
+	//
+	// Encrypt the data frame if under security mode excepct null data. Suggested by CCW.
+	//
+	if (_TRUE ==bDataFrame)
+	{
+		u32 EncAlg;
+
+		EncAlg = padapter->securitypriv.dot11PrivacyAlgrthm;
+		switch (EncAlg)
+		{
+			case _NO_PRIVACY_:
+				SET_TX_DESC_SEC_TYPE_8188E(pDesc, 0x0);
+				break;
+			case _WEP40_:
+			case _WEP104_:
+			case _TKIP_:
+				SET_TX_DESC_SEC_TYPE_8188E(pDesc, 0x1);
+				break;
+			case _SMS4_:
+				SET_TX_DESC_SEC_TYPE_8188E(pDesc, 0x2);
+				break;
+			case _AES_:
+				SET_TX_DESC_SEC_TYPE_8188E(pDesc, 0x3);
+				break;
+			default:
+				SET_TX_DESC_SEC_TYPE_8188E(pDesc, 0x0);
+				break;
+		}
+	}
 
 #if defined(CONFIG_USB_HCI) || defined(CONFIG_SDIO_HCI)
 	// USB interface drop packet if the checksum of descriptor isn't correct.
@@ -238,10 +252,13 @@ void rtl8188es_fill_default_txdesc(
 	{
 		ptxdesc->macid = pattrib->mac_id; // CAM_ID(MAC_ID)
 
-		if (pattrib->ampdu_en == _TRUE)
+		if (pattrib->ampdu_en == _TRUE){
 			ptxdesc->agg_en = 1; // AGG EN
-		else
+			ptxdesc->ampdu_density = pattrib->ampdu_spacing; 
+		}
+		else{
 			ptxdesc->bk = 1; // AGG BK
+		}
 
 		ptxdesc->qsel = pattrib->qsel;
 		ptxdesc->rate_id = pattrib->raid;
@@ -251,8 +268,6 @@ void rtl8188es_fill_default_txdesc(
 		ptxdesc->seq = pattrib->seqnum;
 
 		//todo: qos_en
-
-		ptxdesc->userate = 1; // driver uses rate	
 
 		if ((pattrib->ether_type != 0x888e) &&
 			(pattrib->ether_type != 0x0806) &&
@@ -268,26 +283,32 @@ void rtl8188es_fill_default_txdesc(
 			ptxdesc->rts_ratefb_lmt = 0xF;
 
 #if (RATE_ADAPTIVE_SUPPORT == 1)
-			/* driver-based RA*/
-			if (pattrib->ht_en)
-				ptxdesc->sgi = ODM_RA_GetShortGI_8188E(&pHalData->odmpriv,pattrib->mac_id);
-			ptxdesc->datarate = ODM_RA_GetDecisionRate_8188E(&pHalData->odmpriv,pattrib->mac_id);
+			if(pHalData->fw_ractrl == _FALSE){
+				/* driver-based RA*/
+				ptxdesc->userate = 1; // driver uses rate	
+				if (pattrib->ht_en)
+					ptxdesc->sgi = ODM_RA_GetShortGI_8188E(&pHalData->odmpriv,pattrib->mac_id);
+				ptxdesc->datarate = ODM_RA_GetDecisionRate_8188E(&pHalData->odmpriv,pattrib->mac_id);
 
-			#if (POWER_TRAINING_ACTIVE==1)
-			ptxdesc->pwr_status = ODM_RA_GetHwPwrStatus_8188E(&pHalData->odmpriv,pattrib->mac_id);
-			#endif
-#else /* (RATE_ADAPTIVE_SUPPORT == 1) */
-			/* FW-based RA, TODO */
-			if(pattrib->ht_en)
-				ptxdesc->sgi = 1;
-
-			ptxdesc->datarate = 0x13; //MCS7
+				#if (POWER_TRAINING_ACTIVE==1)
+				ptxdesc->pwr_status = ODM_RA_GetHwPwrStatus_8188E(&pHalData->odmpriv,pattrib->mac_id);
+				#endif
+			}
+			else
 #endif /* (RATE_ADAPTIVE_SUPPORT == 1) */
+			{
+				/* FW-based RA, TODO */
+				if(pattrib->ht_en)
+					ptxdesc->sgi = 1;
+
+				ptxdesc->datarate = 0x13; //MCS7
+			}
 
 			if (padapter->fix_rate != 0xFF) {
 				ptxdesc->userate = 1;
 				ptxdesc->datarate = padapter->fix_rate;
-				ptxdesc->disdatafb = 1;
+				if (!padapter->data_fb)
+					ptxdesc->disdatafb = 1;
 				ptxdesc->sgi = (padapter->fix_rate & BIT(7))?1:0;
 			}
 		}
@@ -296,7 +317,7 @@ void rtl8188es_fill_default_txdesc(
 			// EAP data packet and ARP and DHCP packet.
 			// Use the 1M or 6M data rate to send the EAP/ARP packet.
 			// This will maybe make the handshake smooth.
-
+			ptxdesc->userate = 1; // driver uses rate	
 			ptxdesc->bk = 1; // AGG BK	
 
 			if (pmlmeinfo->preamble_mode == PREAMBLE_SHORT)
@@ -310,7 +331,7 @@ void rtl8188es_fill_default_txdesc(
 	else if (pxmitframe->frame_tag == MGNT_FRAMETAG)
 	{
 //		RT_TRACE(_module_hal_xmit_c_, _drv_notice_, ("%s: MGNT_FRAMETAG\n", __FUNCTION__));
-
+		ptxdesc->userate = 1; // driver uses rate	
 		ptxdesc->macid = pattrib->mac_id; // CAM_ID(MAC_ID)
 		ptxdesc->qsel = pattrib->qsel;
 		ptxdesc->rate_id = pattrib->raid; // Rate ID
@@ -920,26 +941,31 @@ static s32 xmit_xmitframes(PADAPTER padapter, struct xmit_priv *pxmitpriv)
 
 				pxmitframe = LIST_CONTAINOR(xmitframe_plist, struct xmit_frame, list);
 
-				// check xmit_buf size enough or not
-				txlen = TXDESC_SIZE +
-				#ifdef CONFIG_TX_EARLY_MODE	
-					EARLY_MODE_INFO_SIZE +
-				#endif
-					rtw_wlan_pkt_size(pxmitframe);
-
-				if ((pbuf + txlen) > max_xmit_len)
-				{
+				if(_FAIL == rtw_hal_busagg_qsel_check(padapter,pfirstframe->attrib.qsel,pxmitframe->attrib.qsel)){
 					bulkstart = _TRUE;
 				}
-				else
-				{
-					rtw_list_delete(&pxmitframe->list);
-					ptxservq->qcnt--;
-					phwxmit[ac_index].accnt--;
+				else{
+					// check xmit_buf size enough or not
+					txlen = TXDESC_SIZE +
+					#ifdef CONFIG_TX_EARLY_MODE	
+						EARLY_MODE_INFO_SIZE +
+					#endif
+						rtw_wlan_pkt_size(pxmitframe);
 
-					//Remove sta node when there is no pending packets.
-					if (_rtw_queue_empty(&ptxservq->sta_pending) == _TRUE)
-						rtw_list_delete(&ptxservq->tx_pending);
+					if ((pbuf + txlen) > max_xmit_len)
+					{
+						bulkstart = _TRUE;
+					}
+					else
+					{
+						rtw_list_delete(&pxmitframe->list);
+						ptxservq->qcnt--;
+						phwxmit[ac_index].accnt--;
+
+						//Remove sta node when there is no pending packets.
+						if (_rtw_queue_empty(&ptxservq->sta_pending) == _TRUE)
+							rtw_list_delete(&ptxservq->tx_pending);
+					}
 				}
 			}
 			else
@@ -1075,7 +1101,7 @@ static s32 xmit_xmitframes(PADAPTER padapter, struct xmit_priv *pxmitpriv)
 	u32 txlen, max_xmit_len;
 	s32 ret;
 	int inx[4];
-
+	u8 pre_qsel=0xFF,next_qsel=0xFF;
 	err = 0;
 	hwxmits = pxmitpriv->hwxmits;
 	hwentry = pxmitpriv->hwxmit_entry;
@@ -1135,9 +1161,13 @@ static s32 xmit_xmitframes(PADAPTER padapter, struct xmit_priv *pxmitpriv)
 				#else
 				txlen = TXDESC_SIZE + rtw_wlan_pkt_size(pxmitframe);
 				#endif
+
+				next_qsel = pxmitframe->attrib.qsel;
+				
 				if ((NULL == pxmitbuf) ||
 					((_RND(pxmitbuf->len, 8) + txlen) > max_xmit_len)
-					|| (agg_num>= (rtw_hal_sdio_max_txoqt_free_space(padapter)-1))		
+					|| (agg_num>= (rtw_hal_sdio_max_txoqt_free_space(padapter)-1))
+					|| ((agg_num!=0) && (_FAIL == rtw_hal_busagg_qsel_check(padapter,pre_qsel,next_qsel)))
 				)
 				{
 					if (pxmitbuf) {
@@ -1203,6 +1233,7 @@ static s32 xmit_xmitframes(PADAPTER padapter, struct xmit_priv *pxmitpriv)
 					agg_num++;
 					if (agg_num != 1)
 						rtl8188es_update_txdesc(pxmitframe, pxmitframe->buf_addr);
+					pre_qsel = pxmitframe->attrib.qsel;
 					rtw_count_tx_stats(padapter, pxmitframe, pxmitframe->attrib.last_txcmdsz);
 					#ifdef CONFIG_TX_EARLY_MODE		
 					txlen = TXDESC_SIZE+ EARLY_MODE_INFO_SIZE+ pxmitframe->attrib.last_txcmdsz;
@@ -1322,13 +1353,20 @@ next:
 
 	ret = xmit_xmitframes(padapter, pxmitpriv);
 	if (ret == -2) {
+#ifdef CONFIG_REDUCE_TX_CPU_LOADING 
+		rtw_msleep_os(1);
+#else
 		rtw_yield_os();
+#endif
 		goto next;
 	}
 	_enter_critical_bh(&pxmitpriv->lock, &irql);
 	ret = rtw_txframes_pending(padapter);
 	_exit_critical_bh(&pxmitpriv->lock, &irql);
 	if (ret == 1) {
+#ifdef CONFIG_REDUCE_TX_CPU_LOADING 
+		rtw_msleep_os(1);
+#endif
 		goto next;
 	}
 
@@ -1401,11 +1439,9 @@ s32 rtl8188es_mgnt_xmit(PADAPTER padapter, struct xmit_frame *pmgntframe)
 		rtw_IOL_cmd_buf_dump(padapter,pxmitbuf->len,pxmitbuf->pdata);
 #endif	
 
-		rtw_write_port(padapter, ffaddr2deviceId(pdvobjpriv, pxmitbuf->ff_hwaddr), pxmitbuf->len, (u8 *)pxmitbuf);
-		
-		//rtw_free_xmitframe(pxmitpriv, pmgntframe);
-		
-		//pxmitbuf->priv_data = NULL;
+		ret = rtw_write_port(padapter, ffaddr2deviceId(pdvobjpriv, pxmitbuf->ff_hwaddr), pxmitbuf->len, (u8 *)pxmitbuf);
+		if (ret != _SUCCESS)
+			rtw_sctx_done_err(&pxmitbuf->sctx, RTW_SCTX_DONE_WRITE_PORT_ERR);
 		
 		rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
 	}		
@@ -1413,9 +1449,6 @@ s32 rtl8188es_mgnt_xmit(PADAPTER padapter, struct xmit_frame *pmgntframe)
 	{
 		enqueue_pending_xmitbuf(pxmitpriv, pxmitbuf);
 	}
-
-	if  (ret != _SUCCESS)
-		rtw_sctx_done_err(&pxmitbuf->sctx, RTW_SCTX_DONE_UNKNOWN);
 
 	return ret;
 }
