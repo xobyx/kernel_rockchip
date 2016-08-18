@@ -35,10 +35,6 @@
 #endif
 static int wlan_en_gpio = -1;
 #endif //CONFIG_PLATFORM_INTEL_BYT
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0))
-extern void wifi_teardown_dt(void);
-extern int wifi_setup_dt(void);
-#endif
 
 #ifndef dev_to_sdio_func
 #define dev_to_sdio_func(d)     container_of(d, struct sdio_func, dev)
@@ -970,7 +966,7 @@ static int rtw_sdio_resume(struct device *dev)
 
 }
 
-static int __init rtw_drv_entry(void)
+static int rtw_drv_entry(void)
 {
 	int ret = 0;
 
@@ -980,15 +976,6 @@ static int __init rtw_drv_entry(void)
 	DBG_871X_LEVEL(_drv_always_, DRV_NAME" BT-Coex version = %s\n", BTCOEXVERSION);
 #endif // BTCOEXVERSION
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0))
-	ret =wifi_setup_dt();
-	if(ret)
-	{
-		DBG_871X("%s: setup dt failed!!(%d)\n", __FUNCTION__, ret);
-		ret = -1;
-		goto exit;
-	}
-#endif
 	ret = platform_wifi_power_on();
 	if (ret)
 	{
@@ -1020,15 +1007,13 @@ static int __init rtw_drv_entry(void)
 
 poweroff:
 	platform_wifi_power_off();
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0))
-	wifi_teardown_dt();
-#endif
+
 exit:
 	DBG_871X_LEVEL(_drv_always_, "module init ret=%d\n", ret);
 	return ret;
 }
 
-static void __exit rtw_drv_halt(void)
+static void rtw_drv_halt(void)
 {
 	DBG_871X_LEVEL(_drv_always_, "module exit start\n");
 
@@ -1040,9 +1025,6 @@ static void __exit rtw_drv_halt(void)
 
 	platform_wifi_power_off();
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0))
-	wifi_teardown_dt();
-#endif
 	rtw_suspend_lock_uninit();
 	rtw_drv_proc_deinit();
 	rtw_ndev_notifier_unregister();
@@ -1067,6 +1049,37 @@ int rtw_sdio_set_power(int on)
 }
 #endif //CONFIG_PLATFORM_INTEL_BYT
 
-module_init(rtw_drv_entry);
-module_exit(rtw_drv_halt);
+#include "wifi_version.h"
+extern int rk29sdk_wifi_power(int on);
+extern int rk29sdk_wifi_set_carddetect(int val);
+
+int rockchip_wifi_init_module(void)
+{
+    printk("\n");
+    printk("=======================================================\n");
+    printk("==== Launching Wi-Fi driver! (Powered by Rockchip) ====\n");
+    printk("=======================================================\n");
+    printk("Realtek 8189ES/ETV SDIO WiFi driver (Powered by Rockchip,Ver %s) init.\n", RTL8192_DRV_VERSION);
+    rk29sdk_wifi_power(1);
+    rk29sdk_wifi_set_carddetect(1);
+
+    return rtw_drv_entry();
+}
+
+void rockchip_wifi_exit_module(void)
+{
+    printk("\n");
+    printk("=======================================================\n");
+    printk("==== Dislaunching Wi-Fi driver! (Powered by Rockchip) ====\n");
+    printk("=======================================================\n");
+    printk("Realtek 8189ES/ETV SDIO WiFi driver (Powered by Rockchip,Ver %s) init.\n", RTL8192_DRV_VERSION);
+    rtw_drv_halt();
+    rk29sdk_wifi_set_carddetect(0);
+    rk29sdk_wifi_power(0);
+}
+
+EXPORT_SYMBOL(rockchip_wifi_init_module);
+EXPORT_SYMBOL(rockchip_wifi_exit_module);
+//module_init(rtw_drv_entry);
+//module_exit(rtw_drv_halt);
 
