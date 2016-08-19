@@ -20,4 +20,3 @@ config RK_CFG80211
 	select MAC80211
 	help
 	  Enables CFG80211 support
-

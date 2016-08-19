@@ -2,14 +2,36 @@
  * SDIO spec header file
  * Protocol and standard (common) device definitions
  *
- * $Copyright Open Broadcom Corporation$
+ * Copyright (C) 1999-2016, Broadcom Corporation
+ * 
+ *      Unless you and Broadcom execute a separate written software license
+ * agreement governing use of this software, this software is licensed to you
+ * under the terms of the GNU General Public License version 2 (the "GPL"),
+ * available at http://www.broadcom.com/licenses/GPLv2.php, with the
+ * following added to such license:
+ * 
+ *      As a special exception, the copyright holders of this software give you
+ * permission to link this software with independent modules, and to copy and
+ * distribute the resulting executable under terms of your choice, provided that
+ * you also meet, for each linked independent module, the terms and conditions of
+ * the license of that module.  An independent module is a module which is not
+ * derived from this software.  The special exception does not apply to any
+ * modifications of the software.
+ * 
+ *      Notwithstanding the above, under no circumstances may you combine this
+ * software in any way with any other Broadcom software provided under a license
+ * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: sdio.h 308973 2012-01-18 04:19:34Z $
+ *
+ * <<Broadcom-WL-IPTag/Open:>>
+ *
+ * $Id: sdio.h 514727 2014-11-12 03:02:48Z $
  */
 
 #ifndef	_SDIO_H
 #define	_SDIO_H
 
+#ifdef BCMSDIO
 
 /* CCCR structure for function 0 */
 typedef volatile struct {
@@ -66,7 +88,7 @@ typedef volatile struct {
 #define SDIOD_CCCR_INTR_EXTN		0x16
 
 /* Broadcom extensions (corerev >= 1) */
-#define SDIOD_CCCR_BRCM_CARDCAP			0xf0
+#define SDIOD_CCCR_BRCM_CARDCAP		0xf0
 #define SDIOD_CCCR_BRCM_CARDCAP_CMD14_SUPPORT	0x02
 #define SDIOD_CCCR_BRCM_CARDCAP_CMD14_EXT	0x04
 #define SDIOD_CCCR_BRCM_CARDCAP_CMD_NODEC	0x08
@@ -76,6 +98,7 @@ typedef volatile struct {
 /* cccr_sdio_rev */
 #define SDIO_REV_SDIOID_MASK	0xf0	/* SDIO spec revision number */
 #define SDIO_REV_CCCRID_MASK	0x0f	/* CCCR format version number */
+#define SDIO_SPEC_VERSION_3_0	0x40	/* SDIO spec version 3.0 */
 
 /* sd_rev */
 #define SD_REV_PHY_MASK		0x0f	/* SD format version number */
@@ -126,6 +149,7 @@ typedef volatile struct {
 /* speed_control (control device entry into high-speed clocking mode) */
 #define SDIO_SPEED_SHS		0x01	/* supports high-speed [clocking] mode (RO) */
 #define SDIO_SPEED_EHS		0x02	/* enable high-speed [clocking] mode (RW) */
+#define SDIO_SPEED_UHSI_DDR50	   0x08
 
 /* for setting bus speed in card: 0x13h */
 #define SDIO_BUS_SPEED_UHSISEL_M	BITFIELD_MASK(3)
@@ -596,4 +620,6 @@ typedef volatile struct {
 /* command issue options */
 #define CMD_OPTION_DEFAULT	0
 #define CMD_OPTION_TUNING	1
+
+#endif /* def BCMSDIO */
 #endif /* _SDIO_H */
