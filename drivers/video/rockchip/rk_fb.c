@@ -521,6 +521,9 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 	void __user *argp = (void __user *)arg;
 	u32 yuv_phy[2];
 	int enable, new_layer_id;
+#ifdef CONFIG_FB_RK_UMP
+	int secure_id_buf_num = 0;
+#endif
 	
 	switch(cmd)
 	{
@@ -589,6 +592,21 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 			if(dev_drv->lcdc_reg_update)
 				dev_drv->lcdc_reg_update(dev_drv);
 			break;
+#ifdef CONFIG_FB_RK_UMP
+		case GET_UMP_SECURE_ID_BUF2:	/* flow trough */
+			secure_id_buf_num++;
+		case GET_UMP_SECURE_ID_BUF1:	/* flow trough */
+			secure_id_buf_num++;
+		case GET_UMP_SECURE_ID_RK_FB:
+		{
+			printk("22222222%d\n",secure_id_buf_num);
+			struct rk_fb_inf *inf = dev_get_drvdata(info->device);
+			if (disp_get_ump_secure_id)
+				return disp_get_ump_secure_id(info, inf, arg,secure_id_buf_num);
+			else
+				return -ENOTSUPP;
+		}
+#endif
 		default:
 			dev_drv->ioctl(dev_drv,cmd,arg,layer_id);
             break;
@@ -842,6 +860,10 @@ static int rk_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 	dev_drv->pan_display(dev_drv,layer_id);
 	return 0;
 }
+#ifdef CONFIG_FB_RK_UMP
+int (*disp_get_ump_secure_id) (struct fb_info *info, struct rk_fb_inf *g_fbi,unsigned long arg, int buf);
+EXPORT_SYMBOL(disp_get_ump_secure_id);
+#endif
 
 static int rk_fb_blank(int blank_mode, struct fb_info *info)
 {
