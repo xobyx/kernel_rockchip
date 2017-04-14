@@ -1,4 +1,0 @@
-TOOLCHAIN=arm-linux-gnueabihf-
-
-ARCH=arm CROSS_COMPILE=$TOOLCHAIN make imito_qx1_defconfig
-ARCH=arm CROSS_COMPILE=$TOOLCHAIN make -j4

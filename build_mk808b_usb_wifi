@@ -1,5 +1,0 @@
-TOOLCHAIN=arm-linux-gnueabihf-
-
-#ARCH=arm CROSS_COMPILE=$TOOLCHAIN make mk808b_rtl8188eu_defconfig
-ARCH=arm CROSS_COMPILE=$TOOLCHAIN make mk808b_rtl8192cu_defconfig
-ARCH=arm CROSS_COMPILE=$TOOLCHAIN make -j4
