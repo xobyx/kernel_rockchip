@@ -5,4 +5,4 @@ obj-$(CONFIG_RGA2_RK32) += rga2/
 obj-$(CONFIG_RK_HDMI) += hdmi/
 obj-$(CONFIG_IEP) += iep/
 obj-$(CONFIG_RK_TVENCODER) += tvencoder/
-obj-y +=disp/
+obj-$(CONFIG_FB_RK_UMP) +=disp/
