@@ -27,6 +27,7 @@ int platform_wifi_power_on(void)
 {
 	int ret = 0;
 
+
 	return ret;
 }
 

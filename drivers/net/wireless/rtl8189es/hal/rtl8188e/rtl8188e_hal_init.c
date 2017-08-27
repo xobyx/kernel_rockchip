@@ -1795,9 +1795,12 @@ Hal_EfuseWordEnableDataWrite(	IN	PADAPTER	pAdapter,
 		tmpaddr = start_addr;
 		efuse_OneByteWrite(pAdapter,start_addr++, data[0], bPseudoTest);
 		efuse_OneByteWrite(pAdapter,start_addr++, data[1], bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 0);
 
 		efuse_OneByteRead(pAdapter,tmpaddr, &tmpdata[0], bPseudoTest);
 		efuse_OneByteRead(pAdapter,tmpaddr+1, &tmpdata[1], bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 1);
+
 		if((data[0]!=tmpdata[0])||(data[1]!=tmpdata[1])){
 			badworden &= (~BIT0);
 		}
@@ -1807,9 +1810,12 @@ Hal_EfuseWordEnableDataWrite(	IN	PADAPTER	pAdapter,
 		tmpaddr = start_addr;
 		efuse_OneByteWrite(pAdapter,start_addr++, data[2], bPseudoTest);
 		efuse_OneByteWrite(pAdapter,start_addr++, data[3], bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 0);
 
 		efuse_OneByteRead(pAdapter,tmpaddr    , &tmpdata[2], bPseudoTest);
 		efuse_OneByteRead(pAdapter,tmpaddr+1, &tmpdata[3], bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 1);
+
 		if((data[2]!=tmpdata[2])||(data[3]!=tmpdata[3])){
 			badworden &=( ~BIT1);
 		}
@@ -1819,9 +1825,12 @@ Hal_EfuseWordEnableDataWrite(	IN	PADAPTER	pAdapter,
 		tmpaddr = start_addr;
 		efuse_OneByteWrite(pAdapter,start_addr++, data[4], bPseudoTest);
 		efuse_OneByteWrite(pAdapter,start_addr++, data[5], bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 0);
 
 		efuse_OneByteRead(pAdapter,tmpaddr, &tmpdata[4], bPseudoTest);
 		efuse_OneByteRead(pAdapter,tmpaddr+1, &tmpdata[5], bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 1);
+
 		if((data[4]!=tmpdata[4])||(data[5]!=tmpdata[5])){
 			badworden &=( ~BIT2);
 		}
@@ -1831,9 +1840,12 @@ Hal_EfuseWordEnableDataWrite(	IN	PADAPTER	pAdapter,
 		tmpaddr = start_addr;
 		efuse_OneByteWrite(pAdapter,start_addr++, data[6], bPseudoTest);
 		efuse_OneByteWrite(pAdapter,start_addr++, data[7], bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 0);
 
 		efuse_OneByteRead(pAdapter,tmpaddr, &tmpdata[6], bPseudoTest);
 		efuse_OneByteRead(pAdapter,tmpaddr+1, &tmpdata[7], bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 1);
+
 		if((data[6]!=tmpdata[6])||(data[7]!=tmpdata[7])){
 			badworden &=( ~BIT3);
 		}
@@ -2207,9 +2219,11 @@ hal_EfusePgPacketWrite2ByteHeader(
 		pg_header = ((pTargetPkt->offset & 0x07) << 5) | 0x0F;
 		//RTPRINT(FEEPROM, EFUSE_PG, ("pg_header = 0x%x\n", pg_header));
 		efuse_OneByteWrite(pAdapter, efuse_addr, pg_header, bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 0);
 		efuse_OneByteRead(pAdapter, efuse_addr, &tmp_header, bPseudoTest);
+		PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 1);
 
-		while(tmp_header == 0xFF)
+		while(tmp_header == 0xFF || pg_header != tmp_header)
 		{
 			if(repeatcnt++ > EFUSE_REPEAT_THRESHOLD_)
 			{
@@ -2229,9 +2243,11 @@ hal_EfusePgPacketWrite2ByteHeader(
 			pg_header = ((pTargetPkt->offset & 0x78) << 1) | pTargetPkt->word_en;
 
 			efuse_OneByteWrite(pAdapter, efuse_addr, pg_header, bPseudoTest);
+			PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 0);
 			efuse_OneByteRead(pAdapter, efuse_addr, &tmp_header, bPseudoTest);
+			PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 1);
 
-			while(tmp_header == 0xFF)
+			while(tmp_header == 0xFF || pg_header != tmp_header)
 			{
 				if(repeatcnt++ > EFUSE_REPEAT_THRESHOLD_)
 				{
@@ -2300,9 +2316,12 @@ hal_EfusePgPacketWrite1ByteHeader(
 	pg_header = ((pTargetPkt->offset << 4) & 0xf0) |pTargetPkt->word_en;
 
 	efuse_OneByteWrite(pAdapter, efuse_addr, pg_header, bPseudoTest);
-	efuse_OneByteRead(pAdapter, efuse_addr, &tmp_header, bPseudoTest);
+	PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 0);
 
-	while(tmp_header == 0xFF)
+	efuse_OneByteRead(pAdapter, efuse_addr, &tmp_header, bPseudoTest);
+	PHY_SetMacReg(pAdapter, EFUSE_TEST, BIT26, 1);
+
+	while(tmp_header == 0xFF || pg_header != tmp_header)
 	{
 		if(repeatcnt++ > EFUSE_REPEAT_THRESHOLD_)
 		{
@@ -2778,7 +2797,8 @@ void rtl8188e_stop_thread(_adapter *padapter)
 	// stop xmit_buf_thread
 	if (xmitpriv->SdioXmitThread ) {
 		_rtw_up_sema(&xmitpriv->SdioXmitSema);
-		_rtw_down_sema(&xmitpriv->SdioXmitTerminateSema);
+		/*_rtw_down_sema(&xmitpriv->SdioXmitTerminateSema);*/
+		rtw_wait_for_thread_stop(&xmitpriv->sdio_xmit_thread_comp);
 		xmitpriv->SdioXmitThread = 0;
 	}
 #endif
@@ -3754,10 +3774,10 @@ void ResumeTxBeacon(PADAPTER padapter)
 	RT_TRACE(_module_hci_hal_init_c_, _drv_info_, ("+ResumeTxBeacon\n"));
 
 	rtw_write8(padapter, REG_FWHW_TXQ_CTRL+2, (pHalData->RegFwHwTxQCtrl) | BIT6);
-	pHalData->RegFwHwTxQCtrl |= BIT6;
-	rtw_write8(padapter, REG_TBTT_PROHIBIT+1, 0xff);
-	pHalData->RegReg542 |= BIT0;
-	rtw_write8(padapter, REG_TBTT_PROHIBIT+2, pHalData->RegReg542);
+	/*TBTT hold time :4ms */
+	rtw_write16(padapter, REG_TBTT_PROHIBIT + 1,
+		(rtw_read16(padapter, REG_TBTT_PROHIBIT + 1) & (~0xFFF)) | (TBTT_PROBIHIT_HOLD_TIME));
+
 }
 
 void StopTxBeacon(PADAPTER padapter)
@@ -3772,10 +3792,8 @@ void StopTxBeacon(PADAPTER padapter)
 	rtw_write8(padapter, REG_FWHW_TXQ_CTRL+2, (pHalData->RegFwHwTxQCtrl) & (~BIT6));
 	pHalData->RegFwHwTxQCtrl &= (~BIT6);
 	rtw_write8(padapter, REG_TBTT_PROHIBIT+1, 0x64);
-	pHalData->RegReg542 &= ~(BIT0);
-	rtw_write8(padapter, REG_TBTT_PROHIBIT+2, pHalData->RegReg542);
 
-	CheckFwRsvdPageContent(padapter);  // 2010.06.23. Added by tynli.
+	/*CheckFwRsvdPageContent(padapter);  // 2010.06.23. Added by tynli.*/
 }
 
 static void hw_var_set_monitor(PADAPTER Adapter, u8 variable, u8 *val)
@@ -3827,16 +3845,21 @@ static void hw_var_set_opmode(PADAPTER Adapter, u8 variable, u8* val)
 {
 	u8	val8;
 	u8	mode = *((u8 *)val);
+	static u8 isMonitor = _FALSE;
 
 	HAL_DATA_TYPE *pHalData = GET_HAL_DATA(Adapter);
 
-	/* reset RCR */
-	rtw_write32(Adapter, REG_RCR, pHalData->ReceiveConfig);
+	if (isMonitor == _TRUE) {
+		/* reset RCR */
+		rtw_write32(Adapter, REG_RCR, pHalData->ReceiveConfig);
+		isMonitor = _FALSE;
+	}
 
 	DBG_871X( ADPT_FMT "Port-%d  set opmode = %d\n",ADPT_ARG(Adapter),
 		get_iface_type(Adapter), mode);
 	
 	if (mode == _HW_STATE_MONITOR_) {
+		isMonitor = _TRUE;
 		/* set net_type */
 		Set_MSR(Adapter, _HW_STATE_NOLINK_);
 
@@ -3939,9 +3962,9 @@ static void hw_var_set_opmode(PADAPTER Adapter, u8 variable, u8* val)
 			rtw_write8(Adapter, REG_BCNDMATIM, 0x02); // 2ms		
 			rtw_write8(Adapter, REG_DRVERLYINT, 0x05);// 5ms
 			//rtw_write8(Adapter, REG_BCN_MAX_ERR, 0xFF);
-			rtw_write8(Adapter, REG_ATIMWND_1, 0x0a); // 10ms for port1
+			rtw_write8(Adapter, REG_ATIMWND_1, 0x0c); // 13 ms for port1
 			rtw_write16(Adapter, REG_BCNTCFG, 0x00);
-			rtw_write16(Adapter, REG_TBTT_PROHIBIT, 0xff04);
+			rtw_write16(Adapter, REG_TBTT_PROHIBIT, 0x8004);
 			rtw_write16(Adapter, REG_TSFTR_SYN_OFFSET, 0x7fff);// +32767 (~32ms)
 	
 			//reset TSF2	
@@ -4072,9 +4095,9 @@ static void hw_var_set_opmode(PADAPTER Adapter, u8 variable, u8* val)
 			rtw_write8(Adapter, REG_BCNDMATIM, 0x02); // 2ms			
 			rtw_write8(Adapter, REG_DRVERLYINT, 0x05);// 5ms
 			//rtw_write8(Adapter, REG_BCN_MAX_ERR, 0xFF);
-			rtw_write8(Adapter, REG_ATIMWND, 0x0a); // 10ms
+			rtw_write8(Adapter, REG_ATIMWND, 0x0c); // 13ms
 			rtw_write16(Adapter, REG_BCNTCFG, 0x00);
-			rtw_write16(Adapter, REG_TBTT_PROHIBIT, 0xff04);
+			rtw_write16(Adapter, REG_TBTT_PROHIBIT, 0x8004);
 			rtw_write16(Adapter, REG_TSFTR_SYN_OFFSET, 0x7fff);// +32767 (~32ms)
 
 			//reset TSF

@@ -46,6 +46,7 @@
 	#define CONFIG_CFG80211_FORCE_COMPATIBLE_2_6_37_UNDER
 	//#define CONFIG_DEBUG_CFG80211
 	#define CONFIG_SET_SCAN_DENY_TIMER
+	/*#define SUPPLICANT_RTK_VERSION_LOWER_THAN_JB42*/ /* wpa_supplicant realtek version <= jb42 will be defined this */
 #endif
 
 #define CONFIG_EMBEDDED_FWIMG
@@ -85,14 +86,22 @@
 		#define CONFIG_HOSTAPD_MLME
 	#endif
 	//#define CONFIG_FIND_BEST_CHANNEL
+	#define CONFIG_TX_MCAST2UNI		// Support IP multicast->unicast
 #endif
 
-#define CONFIG_TX_MCAST2UNI		// Support IP multicast->unicast
 //#define CONFIG_CHECK_AC_LIFETIME 	// Check packet lifetime of 4 ACs.
 
 #define CONFIG_P2P
+
+#ifndef CONFIG_AP_MODE
+#undef CONFIG_P2P
+#endif
+
 #ifdef CONFIG_P2P
 	//The CONFIG_WFD is for supporting the Wi-Fi display
+	#ifndef CONFIG_AP_MODE
+	#define CONFIG_AP_MODE
+	#endif
 	#define CONFIG_WFD
 
 	#define CONFIG_P2P_REMOVE_GROUP_INFO
@@ -141,7 +150,7 @@
 #define CONFIG_TX_AGGREGATION
 //#define CONFIG_SDIO_TX_TASKLET
 #define CONFIG_SDIO_RX_COPY
-#define CONFIG_SDIO_TX_ENABLE_AVAL_INT
+/* #define CONFIG_SDIO_TX_ENABLE_AVAL_INT */
 
 /*
  * Others
@@ -249,7 +258,7 @@
  */
 #define DBG	1
 
-#define CONFIG_DEBUG /* DBG_871X, etc... */
+//#define CONFIG_DEBUG /* DBG_871X, etc... */
 //#define CONFIG_DEBUG_RTL871X /* RT_TRACE, RT_PRINT_DATA, _func_enter_, _func_exit_ */
 
 #define CONFIG_PROC_DEBUG

@@ -861,8 +861,11 @@ void rtw_cfg80211_indicate_disconnect(_adapter *padapter)
 		}
 	}
 #endif //CONFIG_P2P
-
+#ifdef SUPPLICANT_RTK_VERSION_LOWER_THAN_JB42
 	if (!padapter->mlmepriv.not_indic_disco || padapter->ndev_unregistering) {
+#else
+	{
+#endif
 		#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0) || defined(COMPAT_KERNEL_RELEASE)			
 		DBG_8192C("pwdev->sme_state(b)=%d\n", pwdev->sme_state);
 
@@ -3070,9 +3073,9 @@ static int cfg80211_rtw_leave_ibss(struct wiphy *wiphy, struct net_device *ndev)
 	int ret = 0;
 
 	DBG_871X(FUNC_NDEV_FMT"\n", FUNC_NDEV_ARG(ndev));
-
+#ifdef SUPPLICANT_RTK_VERSION_LOWER_THAN_JB42
 	padapter->mlmepriv.not_indic_disco = _TRUE;
-	
+#endif
 	old_type = rtw_wdev->iftype;
 	
 	rtw_set_to_roam(padapter, 0);
@@ -3094,7 +3097,9 @@ static int cfg80211_rtw_leave_ibss(struct wiphy *wiphy, struct net_device *ndev)
 	}
 
 leave_ibss:
+	#ifdef SUPPLICANT_RTK_VERSION_LOWER_THAN_JB42
 	padapter->mlmepriv.not_indic_disco = _FALSE;
+	#endif
 
 	return 0;
 }
@@ -3102,7 +3107,102 @@ leave_ibss:
 static int cfg80211_rtw_connect(struct wiphy *wiphy, struct net_device *ndev,
 				 struct cfg80211_connect_params *sme)
 {
-	int ret=0;
+	_adapter *padapter = (_adapter *)rtw_netdev_priv(ndev);
+	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
+	struct cfg80211_connect_params *param = NULL;
+	int ret = 0, size = 0;
+
+#if 1
+	DBG_871X("%s: =======>\n", __func__);
+#ifdef SUPPLICANT_RTK_VERSION_LOWER_THAN_JB42
+	padapter->mlmepriv.not_indic_disco = _TRUE;
+#endif
+
+	if(adapter_wdev_data(padapter)->block == _TRUE)
+	{
+		ret = -EBUSY;
+		DBG_871X("%s wdev_priv.block is set\n", __FUNCTION__);
+		goto exit;
+	}
+
+#ifdef CONFIG_PLATFORM_MSTAR_SCAN_BEFORE_CONNECT
+	printk("MStar Android!\n");
+	if(adapter_wdev_data(padapter)->bandroid_scan == _FALSE)
+	{
+#ifdef CONFIG_P2P
+		struct wifidirect_info *pwdinfo= &(padapter->wdinfo);	
+		if(rtw_p2p_chk_state(pwdinfo, P2P_STATE_NONE))
+#endif //CONFIG_P2P
+		{
+			ret = -EBUSY;
+			printk("Android hasn't attached yet!\n");
+			goto exit;
+		}	
+	}
+#endif
+
+	rtw_ps_deny(padapter, PS_DENY_JOIN);
+	if(_FAIL == rtw_pwr_wakeup(padapter)) {
+		ret= -EPERM;
+		goto exit;
+	}
+
+	if(check_fwstate(pmlmepriv, WIFI_AP_STATE)) {
+		ret = -EPERM;
+		goto exit;
+	}
+
+	if (check_fwstate(pmlmepriv, _FW_UNDER_LINKING) == _TRUE) {
+		ret = -EBUSY;
+		DBG_871X("%s, fw_state=0x%x, goto exit\n",
+			 __func__, pmlmepriv->fw_state);
+		goto exit;		
+	}
+
+#ifdef CONFIG_CONCURRENT_MODE
+	if (check_buddy_fwstate(padapter, _FW_UNDER_LINKING) == _TRUE) {
+		DBG_871X("%s, but buddy_intf is under linking\n", __func__);
+		ret = -EINVAL;
+		goto exit;
+	}
+#endif
+
+	if (!sme->ssid || !sme->ssid_len) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	if (sme->ssid_len > IW_ESSID_MAX_SIZE) {
+		ret= -E2BIG;
+		goto exit;
+	}
+
+	size = sizeof(struct cfg80211_connect_params);
+	param = (struct cfg80211_connect_params *)rtw_zmalloc(size);
+
+	if (param == NULL) {
+		ret = -EPERM;
+		DBG_871X("%s: allocate params fail\n", __func__);
+		goto exit;
+	}
+
+	_rtw_memcpy(param, sme, size);
+
+	if (check_fwstate(pmlmepriv, _FW_UNDER_LINKING) == _TRUE) {
+		ret = -EBUSY;
+		DBG_8192C("%s, fw_state=0x%x, goto exit\n",
+			  __func__, pmlmepriv->fw_state);
+		rtw_mfree((u8 *)param, size);
+		goto exit;
+	}
+
+	rtw_start_connect_cmd(padapter, param);
+exit:
+	#ifdef SUPPLICANT_RTK_VERSION_LOWER_THAN_JB42
+	if (ret < 0)
+		padapter->mlmepriv.not_indic_disco = _FALSE;
+	#endif
+#else
 	_irqL irqL;	
 	_list *phead;	
 	struct wlan_network *pnetwork = NULL;
@@ -3348,7 +3448,7 @@ exit:
 	DBG_8192C("<=%s, ret %d\n",__FUNCTION__, ret);
 
 	padapter->mlmepriv.not_indic_disco = _FALSE;
-
+#endif
 	return ret;
 }
 
@@ -3358,8 +3458,9 @@ static int cfg80211_rtw_disconnect(struct wiphy *wiphy, struct net_device *ndev,
 	_adapter *padapter = (_adapter *)rtw_netdev_priv(ndev);
 
 	DBG_871X(FUNC_NDEV_FMT" - Start to Disconnect\n", FUNC_NDEV_ARG(ndev));
-
+#ifdef SUPPLICANT_RTK_VERSION_LOWER_THAN_JB42
 	padapter->mlmepriv.not_indic_disco = _TRUE;
+#endif
 
 	rtw_set_to_roam(padapter, 0);
 
@@ -3376,9 +3477,9 @@ static int cfg80211_rtw_disconnect(struct wiphy *wiphy, struct net_device *ndev,
 		rtw_free_assoc_resources(padapter, 1);
 		rtw_pwr_wakeup(padapter);		
 	}
-
+#ifdef SUPPLICANT_RTK_VERSION_LOWER_THAN_JB42
 	padapter->mlmepriv.not_indic_disco = _FALSE;
-
+#endif
 	DBG_871X(FUNC_NDEV_FMT" return 0\n", FUNC_NDEV_ARG(ndev));
 	return 0;
 }
@@ -5771,6 +5872,7 @@ static int cfg80211_rtw_sched_scan_stop(struct wiphy *wiphy,
 }
 #endif /* CONFIG_PNO_SUPPORT */
 
+#ifdef CONFIG_AP_MODE
 static int rtw_cfg80211_set_beacon_wpsp2pie(struct net_device *ndev, char *buf, int len)
 {	
 	int ret = 0;
@@ -6143,6 +6245,7 @@ int rtw_cfg80211_set_mgnt_wpsp2pie(struct net_device *net, char *buf, int len,
 	return ret;
 	
 }
+#endif /*CONFIG_AP_MODE*/
 
 static void rtw_cfg80211_init_ht_capab_ex(_adapter *padapter, struct ieee80211_sta_ht_cap *ht_cap, enum ieee80211_band band, u8 rf_type)
 {

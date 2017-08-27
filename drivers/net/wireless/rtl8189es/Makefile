@@ -14,11 +14,18 @@ EXTRA_CFLAGS += -Wno-unused-parameter
 EXTRA_CFLAGS += -Wno-unused-function
 EXTRA_CFLAGS += -Wno-unused
 #EXTRA_CFLAGS += -Wno-uninitialized
-#EXTRA_CFLAGS += -Wno-error=date-time	# Fix compile error on gcc 4.9 and later
+
+GCC_VER_49 := $(shell echo `$(CC) -dumpversion | cut -f1-2 -d.` \>= 4.9 | bc )
+ifeq ($(GCC_VER_49),1)
+EXTRA_CFLAGS += -Wno-date-time	# Fix compile error && warning on gcc 4.9 and later
+endif
 
 EXTRA_CFLAGS += -I$(src)/include
 
 EXTRA_LDFLAGS += --strip-debug
+
+CONFIG_ANDROID_4_2 = n
+CONFIG_ANDROID_4_4_Kernel_3_0 = n
 
 CONFIG_AUTOCFG_CP = n
 
@@ -39,7 +46,7 @@ CONFIG_SDIO_HCI = y
 CONFIG_GSPI_HCI = n
 ########################## Features ###########################
 CONFIG_MP_INCLUDED = y
-CONFIG_POWER_SAVING = n
+CONFIG_POWER_SAVING = y
 CONFIG_USB_AUTOSUSPEND = n
 CONFIG_HW_PWRP_DETECTION = n
 CONFIG_WIFI_TEST = n
@@ -119,7 +126,6 @@ CONFIG_PLATFORM_ARM_SPREADTRUM_6820 = n
 CONFIG_PLATFORM_ARM_SPREADTRUM_8810 = n
 CONFIG_PLATFORM_ARM_WMT = n
 CONFIG_PLATFORM_TI_DM365 = n
-CONFIG_PLATFORM_AML = n
 CONFIG_PLATFORM_MOZART = n
 CONFIG_PLATFORM_RTK119X = n
 CONFIG_PLATFORM_NOVATEK_NT72668 = n
@@ -1002,8 +1008,8 @@ EXTRA_CFLAGS += -DCONFIG_P2P_IPS -DCONFIG_PLATFORM_ANDROID
 EXTRA_CFLAGS += -DCONFIG_RADIO_WORK
 EXTRA_CFLAGS += -DRTW_VENDOR_EXT_SUPPORT
 ARCH := arm
-CROSS_COMPILE := /mnt/newdisk/isaac/nvidia/android_ara_5.1/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin/arm-eabi-
-KSRC :=/mnt/newdisk/isaac/nvidia/android_ara_5.1/out/target/product/jetson/obj/kernel/
+CROSS_COMPILE := /media/isaac/data/nvidia_tk1/android_L/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin/arm-eabi-
+KSRC :=/media/isaac/data/nvidia_tk1/android_L/out/target/product/shieldtablet/obj/KERNEL/
 MODULE_NAME = wlan
 endif
 
@@ -1136,18 +1142,6 @@ KERNELOUTPUT := ${PRODUCTDIR}/tmp
 KVER  := 2.6.18
 endif
 
-ifeq ($(CONFIG_PLATFORM_AML), y)
-EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN -fno-pic
-EXTRA_CFLAGS += -DCONFIG_IOCTL_CFG80211 -DCONFIG_CONCURRENT_MODE
-EXTRA_CFLAGS += -DCONFIG_P2P_IPS -DRTW_USE_CFG80211_STA_EVENT
-EXTRA_CFLAGS += -DCONFIG_RADIO_WORK
-#ARCH := arm
-ARCH := arm64
-#CROSS_COMPILE := arm-linux-gnueabihf-
-CROSS_COMPILE := aarch64-linux-gnu-
-KSRC := /mnt/nfsroot/rongjun.chen/android64/common
-
-endif
 ifeq ($(CONFIG_PLATFORM_MOZART), y)
 EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN -DCONFIG_PLATFORM_MOZART
 ARCH := arm
@@ -1213,13 +1207,10 @@ endif
 
 ifeq ($(CONFIG_PLATFORM_ARM_RK2818), y)
 EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN -DCONFIG_PLATFORM_ANDROID -DCONFIG_PLATFORM_ROCKCHIPS
-ifeq ($(CONFIG_SDIO_HCI), y)
-EXTRA_CFLAGS += -DCONFIG_RESUME_IN_WORKQUEUE
-endif
 ARCH := arm
 CROSS_COMPILE := /usr/src/release_fae_version/toolchain/arm-eabi-4.4.0/bin/arm-eabi-
 KSRC := /usr/src/release_fae_version/kernel25_A7_281x
-MODULE_NAME := 8189es
+MODULE_NAME := wlan
 endif
 
 ifeq ($(CONFIG_PLATFORM_ARM_RK3188), y)
@@ -1228,14 +1219,22 @@ EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN -DCONFIG_PLATFORM_ANDROID -DCONFIG_PLATFO
 EXTRA_CFLAGS += -DCONFIG_IOCTL_CFG80211 -DRTW_USE_CFG80211_STA_EVENT
 EXTRA_CFLAGS += -DCONFIG_CONCURRENT_MODE
 # default setting for Power control
-EXTRA_CFLAGS += -DRTW_ENABLE_WIFI_CONTROL_FUNC
-EXTRA_CFLAGS += -DRTW_SUPPORT_PLATFORM_SHUTDOWN
+#EXTRA_CFLAGS += -DRTW_ENABLE_WIFI_CONTROL_FUNC
+#EXTRA_CFLAGS += -DRTW_SUPPORT_PLATFORM_SHUTDOWN
 # default setting for Special function
 EXTRA_CFLAGS += -DCONFIG_P2P_IPS
+ifeq ($(CONFIG_ANDROID_4_2), y)
+EXTRA_CFLAGS += -DCONFIG_ANDROID_4_2 -DCONFIG_MINIMAL_MEMORY_USAGE
+else
+ifeq ($(CONFIG_ANDROID_4_4_Kernel_3_0), y)
+else
+EXTRA_CFLAGS += -DCONFIG_RADIO_WORK
+endif
+endif
 ARCH := arm
 CROSS_COMPILE := /home/android_sdk/Rockchip/Rk3188/prebuilts/gcc/linux-x86/arm/arm-eabi-4.6/bin/arm-eabi-
 KSRC := /home/android_sdk/Rockchip/Rk3188/kernel
-MODULE_NAME := 8189es
+MODULE_NAME := wlan
 endif
 
 ifeq ($(CONFIG_PLATFORM_ARM_RK3066), y)
@@ -1245,9 +1244,6 @@ EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN
 EXTRA_CFLAGS += -DCONFIG_CONCURRENT_MODE
 EXTRA_CFLAGS += -DCONFIG_IOCTL_CFG80211
 EXTRA_CFLAGS += -DCONFIG_P2P_IPS
-ifeq ($(CONFIG_SDIO_HCI), y)
-EXTRA_CFLAGS += -DRTW_SUPPORT_PLATFORM_SHUTDOWN
-endif
 EXTRA_CFLAGS += -fno-pic
 ARCH := arm
 CROSS_COMPILE := /home/android_sdk/Rockchip/rk3066_20130607/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.6/bin/arm-linux-androideabi-
@@ -1334,8 +1330,7 @@ EXTRA_CFLAGS += -DCONFIG_TRAFFIC_PROTECT
 # default setting for Android 4.1, 4.2, 4.3, 4.4
 EXTRA_CFLAGS += -DCONFIG_CONCURRENT_MODE
 EXTRA_CFLAGS += -DCONFIG_IOCTL_CFG80211 -DRTW_USE_CFG80211_STA_EVENT
-#EXTRA_CFLAGS += -DCONFIG_P2P_IPS -DCONFIG_QOS_OPTIMIZATION
-EXTRA_CFLAGS +=-DCONFIG_QOS_OPTIMIZATION
+EXTRA_CFLAGS += -DCONFIG_P2P_IPS -DCONFIG_QOS_OPTIMIZATION
 
 EXTRA_CFLAGS += -DCONFIG_PLATFORM_OPS
 ifeq ($(CONFIG_USB_HCI), y)
@@ -1353,7 +1348,7 @@ ARCH := arm
 #CROSS_COMPILE := /home/android_sdk/Allwinner/a31/android-jb42/lichee/buildroot/output/external-toolchain/bin/arm-linux-gnueabi-
 #KSRC :=/home/android_sdk/Allwinner/a31/android-jb42/lichee/linux-3.3
 #ifeq ($(CONFIG_USB_HCI), y)
-MODULE_NAME := 8812au
+#MODULE_NAME := 8188eu_sw
 #endif
 # ==== Cross compile setting for kitkat-a3x_v4.5 =====
 CROSS_COMPILE := /home/android_sdk/Allwinner/a31/kitkat-a3x_v4.5/lichee/buildroot/output/external-toolchain/bin/arm-linux-gnueabi-

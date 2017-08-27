@@ -1451,7 +1451,12 @@ func_exit:
 	return res;
 }
 
-extern char* rtw_initmac;
+extern char *rtw_initmac;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
+#include <linux/rfkill-wlan.h>
+#else
+extern int rk29sdk_wifi_mac_addr(unsigned char *buf);
+#endif
 /**
  * rtw_macaddr_cfg - Decide the mac address used
  * @out: buf to store mac address decided
@@ -1476,6 +1481,28 @@ void rtw_macaddr_cfg(u8 *out, const u8 *hw_mac_addr)
 
 		goto err_chk;
 	}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))	
+	if (!rockchip_wifi_mac_addr(mac)) {
+		printk("=========> get mac address from flash=[%02x:%02x:%02x:%02x:%02x:%02x]\n", mac[0], mac[1],
+                mac[2], mac[3], mac[4], mac[5]);
+		//_rtw_memcpy(mac_addr, mac, ETH_ALEN);
+		goto err_chk;
+	}
+#else
+#ifndef CONFIG_ANDROID_4_2
+{
+	u8 macbuf[30] = {0};
+	if (!rk29sdk_wifi_mac_addr(macbuf)) {
+		int jj,kk;
+		printk("=========> get mac address from flash %s\n", macbuf);
+		for( jj = 0, kk = 0; jj < ETH_ALEN; jj++, kk += 3 )
+		    mac[jj] = key_2char2num(macbuf[kk], macbuf[kk+ 1]);
+		goto err_chk;
+	}
+}
+#endif
+#endif	
 
 	/* platform specified */
 #ifdef CONFIG_PLATFORM_INTEL_BYT

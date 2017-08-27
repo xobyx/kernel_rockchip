@@ -835,6 +835,7 @@ int rtw_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 #endif			
 		}		
 		break;
+#ifdef CONFIG_AP_MODE
 	case ANDROID_WIFI_CMD_HOSTAPD_SET_MACADDR_ACL:
 	{
 		padapter->stapriv.acl_list.mode = ( u8 ) get_int_from_command(command);
@@ -855,6 +856,7 @@ int rtw_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 		rtw_acl_remove_sta(padapter, addr);
 		break;
 	}
+#endif /* CONFIG_AP_MODE */
 #if defined(CONFIG_GTK_OL) && (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0))
 	case ANDROID_WIFI_CMD_GTK_REKEY_OFFLOAD:
 		rtw_gtk_offload(net, (u8*)command);
@@ -1070,75 +1072,6 @@ static int wifi_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef RTW_SUPPORT_PLATFORM_SHUTDOWN
-extern PADAPTER g_test_adapter;
-
-static void shutdown_card(void)
-{
-	u32 addr;
-	u8 tmp8, cnt=0;
-
-	if (NULL == g_test_adapter)
-	{
-		DBG_871X("%s: padapter==NULL\n", __FUNCTION__);
-		return;
-	}
-
-#ifdef CONFIG_FWLPS_IN_IPS
-	LeaveAllPowerSaveMode(g_test_adapter);
-#endif // CONFIG_FWLPS_IN_IPS
-
-	// Leave SDIO HCI Suspend
-	addr = 0x10250086;
-	rtw_write8(g_test_adapter, addr, 0);
-	do {
-		tmp8 = rtw_read8(g_test_adapter, addr);
-		cnt++;
-		DBG_871X(FUNC_ADPT_FMT ": polling SDIO_HSUS_CTRL(0x%x)=0x%x, cnt=%d\n",
-			FUNC_ADPT_ARG(g_test_adapter), addr, tmp8, cnt);
-
-		if (tmp8 & BIT(1))
-			break;
-
-		if (cnt >= 100)
-		{
-			DBG_871X(FUNC_ADPT_FMT ": polling 0x%x[1]==1 FAIL!!\n",
-				FUNC_ADPT_ARG(g_test_adapter), addr);
-			break;
-		}
-
-		rtw_mdelay_os(10);
-	} while (1);
-
-	// unlock register I/O
-	rtw_write8(g_test_adapter, 0x1C, 0);
-
-	// enable power down function
-	// 0x04[4] = 1
-	// 0x05[7] = 1
-	addr = 0x04;
-	tmp8 = rtw_read8(g_test_adapter, addr);
-	tmp8 |= BIT(4);
-	rtw_write8(g_test_adapter, addr, tmp8);
-	DBG_871X(FUNC_ADPT_FMT ": read after write 0x%x=0x%x\n",
-		FUNC_ADPT_ARG(g_test_adapter), addr, rtw_read8(g_test_adapter, addr));
-
-	addr = 0x05;
-	tmp8 = rtw_read8(g_test_adapter, addr);
-	tmp8 |= BIT(7);
-	rtw_write8(g_test_adapter, addr, tmp8);
-	DBG_871X(FUNC_ADPT_FMT ": read after write 0x%x=0x%x\n",
-		FUNC_ADPT_ARG(g_test_adapter), addr, rtw_read8(g_test_adapter, addr));
-
-	// lock register page0 0x0~0xB read/write
-	rtw_write8(g_test_adapter, 0x1C, 0x0E);
-
-	rtw_set_surprise_removed(g_test_adapter);
-	DBG_871X(FUNC_ADPT_FMT ": bSurpriseRemoved=%s\n",
-		FUNC_ADPT_ARG(g_test_adapter), rtw_is_surprise_removed(g_test_adapter)?"True":"False");
-}
-#endif // RTW_SUPPORT_PLATFORM_SHUTDOWN
-
 static int wifi_remove(struct platform_device *pdev)
 {
 	struct wifi_platform_data *wifi_ctrl =
@@ -1153,23 +1086,6 @@ static int wifi_remove(struct platform_device *pdev)
 	up(&wifi_control_sem);
 	return 0;
 }
-
-#ifdef RTW_SUPPORT_PLATFORM_SHUTDOWN
-static void wifi_shutdown(struct platform_device *pdev)
-{
-	struct wifi_platform_data *wifi_ctrl =
-		(struct wifi_platform_data *)(pdev->dev.platform_data);
-	
-
-	DBG_871X("## %s\n", __FUNCTION__);
-
-	wifi_control_data = wifi_ctrl;
-
-	shutdown_card();
-	wifi_set_power(0, 0);	/* Power Off */
-	wifi_set_carddetect(0);	/* CardDetect (1->0) */
-}
-#endif // RTW_SUPPORT_PLATFORM_SHUTDOWN
 
 static int wifi_suspend(struct platform_device *pdev, pm_message_t state)
 {
@@ -1196,9 +1112,6 @@ static struct platform_driver wifi_device = {
 	.remove         = wifi_remove,
 	.suspend        = wifi_suspend,
 	.resume         = wifi_resume,
-#ifdef RTW_SUPPORT_PLATFORM_SHUTDOWN
-	.shutdown       = wifi_shutdown,
-#endif // RTW_SUPPORT_PLATFORM_SHUTDOWN
 	.driver         = {
 	.name   = "bcmdhd_wlan",
 	}

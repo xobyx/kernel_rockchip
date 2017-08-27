@@ -34,9 +34,10 @@ sint	_rtw_init_cmd_priv (struct	cmd_priv *pcmdpriv)
 _func_enter_;	
 
 	_rtw_init_sema(&(pcmdpriv->cmd_queue_sema), 0);
-	//_rtw_init_sema(&(pcmdpriv->cmd_done_sema), 0);
-	_rtw_init_sema(&(pcmdpriv->terminate_cmdthread_sema), 0);
-	
+	/* _rtw_init_sema(&(pcmdpriv->cmd_done_sema), 0); */
+	/* _rtw_init_sema(&(pcmdpriv->terminate_cmdthread_sema), 0); */
+	_rtw_init_sema(&(pcmdpriv->start_cmdthread_sema), 0);
+	_rtw_init_completion(&pcmdpriv->cmdthread_comp);
 	
 	_rtw_init_queue(&(pcmdpriv->cmd_queue));
 	
@@ -187,8 +188,9 @@ _func_enter_;
 	if(pcmdpriv){
 		_rtw_spinlock_free(&(pcmdpriv->cmd_queue.lock));
 		_rtw_free_sema(&(pcmdpriv->cmd_queue_sema));
-		//_rtw_free_sema(&(pcmdpriv->cmd_done_sema));
-		_rtw_free_sema(&(pcmdpriv->terminate_cmdthread_sema));
+		/* _rtw_free_sema(&(pcmdpriv->cmd_done_sema)); */
+		/* _rtw_free_sema(&(pcmdpriv->terminate_cmdthread_sema)); */
+		_rtw_free_sema(&(pcmdpriv->start_cmdthread_sema));
 
 		if (pcmdpriv->cmd_allocated_buf)
 			rtw_mfree(pcmdpriv->cmd_allocated_buf, MAX_CMDSZ + CMDBUFF_ALIGN_SZ);
@@ -519,7 +521,8 @@ void rtw_stop_cmd_thread(_adapter *adapter)
 	{
 		adapter->cmdpriv.stop_req = 1;
 		_rtw_up_sema(&adapter->cmdpriv.cmd_queue_sema);
-		_rtw_down_sema(&adapter->cmdpriv.terminate_cmdthread_sema);
+		/* _rtw_down_sema(&adapter->cmdpriv.terminate_cmdthread_sema); */
+		rtw_wait_for_thread_stop(&adapter->cmdpriv.cmdthread_comp);
 	}
 }
 
@@ -545,7 +548,8 @@ _func_enter_;
 
 	pcmdpriv->stop_req = 0;
 	ATOMIC_SET(&(pcmdpriv->cmdthd_running), _TRUE);
-	_rtw_up_sema(&pcmdpriv->terminate_cmdthread_sema);
+	/* _rtw_up_sema(&pcmdpriv->terminate_cmdthread_sema); */
+	_rtw_up_sema(&pcmdpriv->start_cmdthread_sema);
 
 	RT_TRACE(_module_rtl871x_cmd_c_,_drv_info_,("start r871x rtw_cmd_thread !!!!\n"));
 
@@ -727,12 +731,13 @@ post_process:
 		rtw_free_cmd_obj(pcmd);	
 	}while(1);
 
-	_rtw_up_sema(&pcmdpriv->terminate_cmdthread_sema);
+	/* _rtw_up_sema(&pcmdpriv->terminate_cmdthread_sema); */
 	ATOMIC_SET(&(pcmdpriv->cmdthd_running), _FALSE);
 
 _func_exit_;
 
-	thread_exit();
+	thread_exit(&pcmdpriv->cmdthread_comp);
+	return 0;
 
 }
 
@@ -1332,6 +1337,42 @@ inline u8 rtw_change_bss_chbw_cmd(_adapter *adapter, int flags, u8 req_ch, u8 re
 		, req_ch, req_bw, req_offset
 	);
 }
+
+#ifdef CONFIG_IOCTL_CFG80211
+u8 rtw_start_connect_cmd(_adapter *padapter,
+			 struct cfg80211_connect_params *param)
+{
+	u8 res = _SUCCESS;
+	struct cmd_obj	*pcmd;
+	struct cmd_priv	*pcmdpriv = &padapter->cmdpriv;
+
+	DBG_871X("%s: ====>\n", __func__);
+	if (param == NULL) {
+		res = _FAIL;
+		DBG_871X("%s: NULL paramater!!\n", __func__);
+		goto _exit;
+	}
+
+	pcmd = (struct cmd_obj*)rtw_zmalloc(sizeof(struct cmd_obj));
+
+	if (pcmd == NULL) {
+		res = _FAIL;
+		DBG_871X("%s: alloc pcmd object fail\n", __func__);
+		if (param) {
+			rtw_mfree((u8 *)param,
+				  sizeof(struct cfg80211_connect_params));
+		}
+		goto _exit;
+	}
+
+	init_h2fwcmd_w_parm_no_rsp(pcmd, param, _start_connect_CMD_);
+	res = rtw_enqueue_cmd(pcmdpriv, pcmd);
+
+	DBG_871X("%s: <=====\n", __func__);
+_exit:
+	return res;
+}
+#endif
 
 u8 rtw_joinbss_cmd(_adapter  *padapter, struct wlan_network* pnetwork)
 {
@@ -3034,7 +3075,7 @@ void power_saving_wk_hdl(_adapter *padapter)
 //add for CONFIG_IEEE80211W, none 11w can use it
 void reset_securitypriv_hdl(_adapter *padapter)
 {
-	 rtw_reset_securitypriv(padapter);
+	rtw_reset_securitypriv(padapter);
 }
 
 void free_assoc_resources_hdl(_adapter *padapter)
@@ -3976,6 +4017,29 @@ exit:
 _func_exit_;	
 }
 
+void rtw_start_connect_cmd_callback(_adapter* padapter, struct cmd_obj *pcmd)
+{
+	struct	mlme_priv *pmlmepriv = &padapter->mlmepriv;
+
+_func_enter_;	
+
+	if (pcmd->res == H2C_DROPPED) {
+		DBG_871X("%s: cmd dropped!\n", __func__);
+	} else if(pcmd->res != H2C_SUCCESS) {
+		DBG_871X("%s: cmd fail\n", __func__);
+	}
+
+	DBG_871X("%s: free cmd obj\n", __func__);
+	rtw_free_cmd_obj(pcmd);
+#ifdef SUPPLICANT_RTK_VERSION_LOWER_THAN_JB42
+	if (padapter->mlmepriv.not_indic_disco == _TRUE)
+		padapter->mlmepriv.not_indic_disco = _FALSE;
+#endif
+
+	rtw_ps_deny_cancel(padapter, PS_DENY_JOIN);
+
+_func_exit_;
+}
 
 void rtw_joinbss_cmd_callback(_adapter*	padapter,  struct cmd_obj *pcmd)
 {
