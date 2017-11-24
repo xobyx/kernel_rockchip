@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2016 ARM Limited. All rights reserved.
+ * Copyright (C) 2010-2017 ARM Limited. All rights reserved.
  * 
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
@@ -121,15 +121,15 @@ _mali_osk_errcode_t _mali_osk_gpu_secure_mode_init(void);
  */
 _mali_osk_errcode_t _mali_osk_gpu_secure_mode_deinit(void);
 
-/** @brief Enable the gpu secure mode.
+/** @brief Reset GPU and enable the gpu secure mode.
  * @return _MALI_OSK_ERR_OK on success, otherwise failure.
  */
-_mali_osk_errcode_t _mali_osk_gpu_secure_mode_enable(void);
+_mali_osk_errcode_t _mali_osk_gpu_reset_and_secure_mode_enable(void);
 
-/** @brief Disable the gpu secure mode.
+/** @brief Reset GPU and disable the gpu secure mode.
  * @return _MALI_OSK_ERR_OK on success, otherwise failure.
  */
-_mali_osk_errcode_t _mali_osk_gpu_secure_mode_disable(void);
+_mali_osk_errcode_t _mali_osk_gpu_reset_and_secure_mode_disable(void);
 
 /** @brief Check if the gpu secure mode has been enabled.
  * @return MALI_TRUE if enabled, otherwise MALI_FALSE.

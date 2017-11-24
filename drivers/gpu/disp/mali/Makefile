@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2010-2016 ARM Limited. All rights reserved.
+# Copyright (C) 2010-2017 ARM Limited. All rights reserved.
 # 
 # This program is free software and is provided to you under the terms of the GNU General Public License version 2
 # as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
@@ -12,6 +12,7 @@ USE_UMPV2=0
 USING_PROFILING ?= 1
 USING_INTERNAL_PROFILING ?= 0
 USING_DVFS ?= 1
+USING_DMA_BUF_FENCE ?= 0
 MALI_HEATMAPS_ENABLED ?= 0
 MALI_DMA_BUF_MAP_ON_ATTACH ?= 1
 MALI_PMU_PARALLEL_POWER_UP ?= 0
@@ -145,6 +146,11 @@ endif
 ifeq ($(USING_DVFS),1)
 export CONFIG_MALI_DVFS=y
 export EXTRA_DEFINES += -DCONFIG_MALI_DVFS
+endif
+
+ifeq ($(USING_DMA_BUF_FENCE),1)
+export CONFIG_MALI_DMA_BUF_FENCE=y
+export EXTRA_DEFINES += -DCONFIG_MALI_DMA_BUF_FENCE
 endif
 
 ifeq ($(MALI_PMU_PARALLEL_POWER_UP),1)

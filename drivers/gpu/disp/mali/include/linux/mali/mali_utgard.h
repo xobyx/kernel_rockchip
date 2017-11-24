@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2016 ARM Limited. All rights reserved.
+ * Copyright (C) 2012-2017 ARM Limited. All rights reserved.
  * 
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
@@ -491,10 +491,10 @@
 		int (*secure_mode_init)(void);
 		/* Function that deinit the mali gpu secure mode */
 		void (*secure_mode_deinit)(void);
-		/* Function that enable the mali gpu secure mode */
-		int (*secure_mode_enable)(void);
-		/* Function that disable the mali gpu secure mode */
-		int (*secure_mode_disable)(void);
+		/* Function that reset GPU and enable gpu secure mode */
+		int (*gpu_reset_and_secure_mode_enable)(void);
+		/* Function that Reset GPU and disable gpu secure mode */
+		int (*gpu_reset_and_secure_mode_disable)(void);
 		/* ipa related interface customer need register */
 #if defined(CONFIG_MALI_DEVFREQ) && defined(CONFIG_DEVFREQ_THERMAL)
 		struct devfreq_cooling_power *gpu_cooling_ops;
